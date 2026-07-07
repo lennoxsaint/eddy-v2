@@ -145,7 +145,7 @@ def test_screen_camera_shorts_are_true_vertical_9x16(tmp_path: Path, monkeypatch
         target_duration_s=2,
         identity="code-cinema",
         shorts_target=1,
-        hook="Proof-gated video",
+        hook="Proof-gated video: don't ship clipped captions or fake polish",
         title="Geometry Test",
     )
     outputs = render_shorts(discover_sources(folder), tmp_path / "run", intent, Receipts(tmp_path / "receipts.jsonl"))

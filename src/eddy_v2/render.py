@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import textwrap
 from pathlib import Path
 
 from .audio import polish_audio
@@ -11,6 +12,15 @@ from .motion import create_motion_project, run_hyperframes
 from .policy import RunPolicy
 from .receipts import Receipts
 from .sources import Sources
+
+
+def drawtext_file(run_dir: Path, name: str, text: str, *, width: int) -> str:
+    text_dir = run_dir / "text"
+    text_dir.mkdir(parents=True, exist_ok=True)
+    wrapped = textwrap.fill(text, width=width, break_long_words=False, break_on_hyphens=False)
+    path = text_dir / f"{name}.txt"
+    path.write_text(wrapped, encoding="utf-8")
+    return str(path).replace("\\", "\\\\").replace(":", "\\:")
 
 
 def write_sidecars(final_dir: Path, duration: float, title: str) -> None:
@@ -39,13 +49,14 @@ def render_long(
     output = final_dir / "video.mp4"
     source_duration = duration_s(sources.camera)
     target = min(intent.target_duration_s, source_duration)
+    long_hook_file = drawtext_file(run_dir, "long-hook", intent.hook, width=52)
     if sources.screen:
         filter_complex = (
             "[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,"
             "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[base];"
             "[0:v]scale=420:-1[cam];"
             "[base][cam]overlay=40:40,"
-            f"drawtext=text='{intent.hook}':x=80:y=h-150:fontsize=44:"
+            f"drawtext=textfile='{long_hook_file}':x=80:y=h-170:fontsize=44:line_spacing=8:"
             "fontcolor=white:box=1:boxcolor=0x07111fcc:boxborderw=24[v]"
         )
         args = [
@@ -91,7 +102,7 @@ def render_long(
             "-i",
             str(audio),
             "-vf",
-            f"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,drawtext=text='{intent.hook}':x=80:y=h-150:fontsize=44:fontcolor=white:box=1:boxcolor=0x07111fcc:boxborderw=24",
+            f"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,drawtext=textfile='{long_hook_file}':x=80:y=h-170:fontsize=44:line_spacing=8:fontcolor=white:box=1:boxcolor=0x07111fcc:boxborderw=24",
             "-map",
             "0:v",
             "-map",
@@ -124,6 +135,7 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
     run_hyperframes(run_dir / "motion" / "shorts-card", receipts, portrait=True)
     source_duration = duration_s(sources.camera)
     outputs: list[Path] = []
+    short_hook_file = drawtext_file(run_dir, "short-hook", intent.hook, width=28)
     for index in range(intent.shorts_target):
         start = float(index * 20)
         if start + 10 > source_duration:
@@ -135,7 +147,7 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 "[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[cam];"
                 "[1:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:black[screen];"
                 "[cam][screen]vstack=inputs=2,"
-                f"drawtext=text='{intent.hook}':x=60:y=1030:fontsize=52:fontcolor=white:"
+                f"drawtext=textfile='{short_hook_file}':x=60:y=1010:fontsize=52:line_spacing=10:fontcolor=white:"
                 "box=1:boxcolor=0x07111fd9:boxborderw=20[v]"
             )
             args = [
@@ -183,7 +195,7 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 "-i",
                 str(sources.camera),
                 "-vf",
-                f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawtext=text='{intent.hook}':x=60:y=1500:fontsize=52:fontcolor=white:box=1:boxcolor=0x07111fd9:boxborderw=20",
+                f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawtext=textfile='{short_hook_file}':x=60:y=1450:fontsize=52:line_spacing=10:fontcolor=white:box=1:boxcolor=0x07111fd9:boxborderw=20",
                 "-r",
                 "30",
                 "-c:v",
