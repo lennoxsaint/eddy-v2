@@ -53,7 +53,9 @@ If the footage folder contains `transcript.vtt`, `transcript.srt`, `transcript.t
 
 When `DESCRIPT_API_KEY` is configured, Eddy tries Descript Studio Sound first using only the extracted audio WAV. It requests a direct upload URL, uploads audio bytes only, prompts Underlord for Studio Sound without timing/content edits, publishes an audio export, downloads it, and marks Strong Studio Sound only if duration parity passes. Tokens and signed URLs are never written to receipts.
 
-For dry tests, set `EDDY_V2_FAKE_DESCRIPT=1` with a dummy `DESCRIPT_API_KEY`; this exercises the Studio Sound receipt/parity path without network egress or credits. `--local-only` refuses Descript even when a key or fake mode is present.
+If Descript is missing or fails parity, Eddy tries Auphonic when `AUPHONIC_API_KEY` and `AUPHONIC_PRESET` or `AUPHONIC_PRESET_UUID` are configured, then ElevenLabs Audio Isolation when `ELEVENLABS_API_KEY` is configured. Both fallbacks upload only the extracted WAV, charge against the same run budget, and must pass duration parity before selection. If every cloud backend is missing, refused, or fails, Eddy uses the local loudness fallback and records the lower-quality selection.
+
+For dry tests, set `EDDY_V2_FAKE_DESCRIPT=1`, `EDDY_V2_FAKE_AUPHONIC=1`, or `EDDY_V2_FAKE_ELEVENLABS=1` with dummy provider credentials; this exercises the same receipt/parity path without network egress or credits. `--local-only` refuses all cloud audio providers even when fake mode is present.
 
 ## Proof Gates
 

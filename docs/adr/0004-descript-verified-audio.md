@@ -10,3 +10,6 @@ V2 tries Descript Studio Sound first using extracted audio only, but it may sati
 - Receipts record API paths, job ids, redacted job summaries, upload byte counts, cloud/cost decisions, and parity verdicts. Bearer tokens and signed upload/download URLs are never written to receipts.
 - Strong Studio Sound passes only when the downloaded export exists, has nonzero duration, and matches the extracted source duration within tolerance. Otherwise Eddy continues to the next configured backend or local loudness fallback.
 - `EDDY_V2_FAKE_DESCRIPT=1` is for tests and dry proof only. It exercises the same receipt/parity contract without contacting Descript or spending credits.
+- Auphonic fallback uses the Simple API with an existing `AUPHONIC_PRESET` or `AUPHONIC_PRESET_UUID`, starts a production from the extracted WAV only, disables timing cutters, polls the production, downloads the first result file, and selects it only after `audio_auphonic_parity` passes.
+- ElevenLabs fallback uses Audio Isolation with the extracted WAV only, converts the returned audio locally for remuxing, and selects it only after `audio_elevenlabs_parity` passes.
+- `--local-only` refuses Descript, Auphonic, and ElevenLabs before any fake or live upload branch can run.

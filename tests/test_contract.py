@@ -27,7 +27,11 @@ def no_external_model_calls(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("DESCRIPT_API_KEY", raising=False)
     monkeypatch.delenv("EDDY_V2_FAKE_DESCRIPT", raising=False)
     monkeypatch.delenv("AUPHONIC_API_KEY", raising=False)
+    monkeypatch.delenv("AUPHONIC_PRESET", raising=False)
+    monkeypatch.delenv("AUPHONIC_PRESET_UUID", raising=False)
+    monkeypatch.delenv("EDDY_V2_FAKE_AUPHONIC", raising=False)
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("EDDY_V2_FAKE_ELEVENLABS", raising=False)
 
 
 def make_layered_fixture(folder: Path, duration: int = 4) -> Path:
@@ -491,16 +495,56 @@ def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest
     assert any(row["event"] == "audio_polish" and row["selected_backend"] == "descript_studio_sound" for row in rows)
 
 
-def test_local_only_refuses_configured_descript_without_upload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_mocked_auphonic_fallback_is_selected_after_descript_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("AUPHONIC_API_KEY", "test-key")
+    monkeypatch.setenv("AUPHONIC_PRESET", "test-preset")
+    monkeypatch.setenv("EDDY_V2_FAKE_AUPHONIC", "1")
+    result = edit_folder(folder, target_duration_s=2)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    assert result.status == "complete"
+    assert any(row["event"] == "audio_descript_parity" and row["status"] == "skipped" for row in rows)
+    assert any(row["event"] == "auphonic_audio" and row["status"] == "fake" for row in rows)
+    assert any(row["event"] == "audio_auphonic_parity" and row["status"] == "pass" for row in rows)
+    assert any(row["event"] == "audio_polish" and row["selected_backend"] == "auphonic" for row in rows)
+    assert not any(row["event"] == "audio_elevenlabs_parity" and row["status"] == "pass" for row in rows)
+
+
+def test_mocked_elevenlabs_fallback_is_selected_after_auphonic_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_ELEVENLABS", "1")
+    result = edit_folder(folder, target_duration_s=2)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    assert result.status == "complete"
+    assert any(row["event"] == "audio_descript_parity" and row["status"] == "skipped" for row in rows)
+    assert any(row["event"] == "audio_auphonic_parity" and row["status"] == "skipped" for row in rows)
+    assert any(row["event"] == "elevenlabs_audio" and row["status"] == "fake" for row in rows)
+    assert any(row["event"] == "audio_elevenlabs_parity" and row["status"] == "pass" for row in rows)
+    assert any(row["event"] == "audio_polish" and row["selected_backend"] == "elevenlabs_audio_isolation" for row in rows)
+
+
+def test_local_only_refuses_configured_cloud_audio_without_upload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     folder = make_layered_fixture(tmp_path / "footage", 3)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
     monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
+    monkeypatch.setenv("AUPHONIC_API_KEY", "test-key")
+    monkeypatch.setenv("AUPHONIC_PRESET", "test-preset")
+    monkeypatch.setenv("EDDY_V2_FAKE_AUPHONIC", "1")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_ELEVENLABS", "1")
     result = edit_folder(folder, local_only=True, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     assert result.status == "complete"
     assert any(row["event"] == "cloud_refused" and row["surface"] == "descript" for row in rows)
+    assert any(row["event"] == "cloud_refused" and row["surface"] == "auphonic" for row in rows)
+    assert any(row["event"] == "cloud_refused" and row["surface"] == "elevenlabs" for row in rows)
     assert not any(row["event"] == "descript_import" for row in rows)
+    assert not any(row["event"] == "auphonic_audio" for row in rows)
+    assert not any(row["event"] == "elevenlabs_audio" for row in rows)
     assert any(row["event"] == "audio_polish" and row["selected_backend"] == "local_loudnorm_fallback" for row in rows)
 
 

@@ -4,7 +4,9 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -17,14 +19,53 @@ from .sources import Sources
 
 DESCRIPT_API_BASE = "https://descriptapi.com/v1"
 DESCRIPT_MEDIA_NAME = "source-audio.wav"
+AUPHONIC_API_BASE = "https://auphonic.com/api"
+ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1"
 
 
 def _descript_api_base() -> str:
     return os.environ.get("EDDY_V2_DESCRIPT_API_BASE", DESCRIPT_API_BASE).rstrip("/")
 
 
+def _auphonic_api_base() -> str:
+    return os.environ.get("EDDY_V2_AUPHONIC_API_BASE", AUPHONIC_API_BASE).rstrip("/")
+
+
+def _elevenlabs_api_base() -> str:
+    return os.environ.get("EDDY_V2_ELEVENLABS_API_BASE", ELEVENLABS_API_BASE).rstrip("/")
+
+
 def _dict_payload(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _multipart_body(
+    fields: dict[str, str],
+    files: dict[str, tuple[str, bytes, str]],
+) -> tuple[bytes, str]:
+    boundary = f"eddyv2-{uuid.uuid4().hex}"
+    chunks: list[bytes] = []
+    for name, value in fields.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
+                str(value).encode(),
+                b"\r\n",
+            ]
+        )
+    for name, (filename, data, content_type) in files.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode(),
+                f"Content-Type: {content_type}\r\n\r\n".encode(),
+                data,
+                b"\r\n",
+            ]
+        )
+    chunks.append(f"--{boundary}--\r\n".encode())
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 
 def _redacted_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -125,14 +166,14 @@ def _download_descript_audio(publish_job: dict[str, Any], output: Path, receipts
     return output
 
 
-def _export_parity_passes(source_audio: Path, exported_audio: Path, receipts: Receipts) -> bool:
+def _audio_parity_passes(source_audio: Path, exported_audio: Path, receipts: Receipts, *, provider: str) -> bool:
     source_duration = duration_s(source_audio)
     exported_duration = duration_s(exported_audio)
     delta = abs(source_duration - exported_duration)
     tolerance = max(1.0, source_duration * 0.01)
     status = "pass" if exported_audio.exists() and exported_duration > 0 and delta <= tolerance else "failed"
     receipts.log(
-        "audio_descript_parity",
+        f"audio_{provider}_parity",
         status=status,
         source_duration_s=round(source_duration, 3),
         exported_duration_s=round(exported_duration, 3),
@@ -169,6 +210,29 @@ def _fake_descript_studio_sound(extracted: Path, output: Path, receipts: Receipt
     return output
 
 
+def _fake_cloud_audio(extracted: Path, output: Path, receipts: Receipts, *, provider: str) -> Path:
+    receipts.log(f"{provider}_audio", status="fake", uploaded_media="audio_extract_only")
+    run_command(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(extracted),
+            "-af",
+            "highpass=f=80,afftdn=nf=-25,acompressor=threshold=-22dB:ratio=2.5:attack=8:release=120,loudnorm=I=-16:TP=-1.5:LRA=10",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            str(output),
+        ],
+        receipts,
+        event="ffmpeg",
+        timeout_s=900,
+    )
+    return output
+
+
 def _try_descript_studio_sound(extracted: Path, run_dir: Path, receipts: Receipts, policy: RunPolicy, cost: CostTracker) -> Path | None:
     token = os.environ.get("DESCRIPT_API_KEY")
     if not token:
@@ -180,7 +244,7 @@ def _try_descript_studio_sound(extracted: Path, run_dir: Path, receipts: Receipt
         cost.charge("descript_studio_sound_estimate", 3.0, provider="descript")
         if os.environ.get("EDDY_V2_FAKE_DESCRIPT"):
             _fake_descript_studio_sound(extracted, output, receipts)
-            return output if _export_parity_passes(extracted, output, receipts) else None
+            return output if _audio_parity_passes(extracted, output, receipts, provider="descript") else None
 
         import_payload = {
             "project_name": f"Eddy V2 Studio Sound {int(time.time())}",
@@ -229,9 +293,195 @@ def _try_descript_studio_sound(extracted: Path, run_dir: Path, receipts: Receipt
         receipts.log("descript_publish", status="started", job_id=publish_response.get("job_id"), project_id=project_id, media_type="Audio")
         publish_job = _wait_for_descript_job(str(publish_response["job_id"]), token, receipts)
         _download_descript_audio(publish_job, output, receipts)
-        return output if _export_parity_passes(extracted, output, receipts) else None
+        return output if _audio_parity_passes(extracted, output, receipts, provider="descript") else None
     except Exception as exc:
         receipts.log("audio_descript_parity", status="failed", error=str(exc), uploaded_media="audio_extract_only")
+        return None
+
+
+def _auphonic_json_request(path: str, token: str, receipts: Receipts) -> dict[str, Any]:
+    url = f"{_auphonic_api_base()}{path}"
+    receipts.log("auphonic_api", phase="start", method="GET", path=path)
+    request = urllib.request.Request(url, headers={"Authorization": f"bearer {token}"}, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            parsed = json.loads(response.read().decode("utf-8"))
+        receipts.log("auphonic_api", phase="finish", method="GET", path=path, status_code=getattr(response, "status", None))
+        return _dict_payload(parsed)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[-1000:]
+        receipts.log("auphonic_api", phase="finish", method="GET", path=path, status_code=exc.code, error=detail)
+        raise RuntimeError(f"auphonic_api_failed:{path}:{exc.code}") from exc
+
+
+def _start_auphonic_simple(extracted: Path, token: str, preset: str, receipts: Receipts) -> str:
+    fields = {
+        "preset": preset,
+        "title": f"Eddy V2 Audio Polish {int(time.time())}",
+        "action": "start",
+        "filtering": "true",
+        "leveler": "true",
+        "normloudness": "true",
+        "loudnesstarget": "-16",
+        "maxpeak": "-1",
+        "denoise": "true",
+        "denoiseamount": "12",
+        "silence_cutter": "false",
+        "filler_cutter": "false",
+        "cough_cutter": "false",
+        "music_cutter": "false",
+    }
+    body, content_type = _multipart_body(
+        fields,
+        {"input_file": (extracted.name, extracted.read_bytes(), "audio/wav")},
+    )
+    receipts.log("auphonic_upload", phase="start", uploaded_media="audio_extract_only", bytes=extracted.stat().st_size, preset_configured=True)
+    request = urllib.request.Request(
+        f"{_auphonic_api_base()}/simple/productions.json",
+        data=body,
+        headers={"Authorization": f"bearer {token}", "Content-Type": content_type},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            parsed = json.loads(response.read().decode("utf-8"))
+        payload = _dict_payload(parsed.get("data"))
+        production_uuid = payload.get("uuid") or parsed.get("uuid")
+        if not production_uuid:
+            raise RuntimeError("auphonic_missing_production_uuid")
+        receipts.log("auphonic_upload", phase="finish", status_code=getattr(response, "status", None), production_uuid=production_uuid)
+        return str(production_uuid)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[-1000:]
+        receipts.log("auphonic_upload", phase="finish", status_code=exc.code, error=detail)
+        raise RuntimeError(f"auphonic_upload_failed:{exc.code}") from exc
+
+
+def _wait_for_auphonic(production_uuid: str, token: str, receipts: Receipts, *, timeout_s: int = 1800) -> dict[str, Any]:
+    started = time.monotonic()
+    interval = float(os.environ.get("EDDY_V2_AUPHONIC_POLL_INTERVAL_S", "10"))
+    while True:
+        response = _auphonic_json_request(f"/production/{production_uuid}.json", token, receipts)
+        production = _dict_payload(response.get("data"))
+        status_string = str(production.get("status_string") or "")
+        receipts.log("auphonic_job_poll", production_uuid=production_uuid, status=production.get("status"), status_string=status_string)
+        if status_string.lower() == "done" or production.get("status") == 3:
+            return production
+        if production.get("error_status") or status_string.lower() in {"error", "failed"}:
+            raise RuntimeError(f"auphonic_job_failed:{production_uuid}:{production.get('error_message') or status_string}")
+        if time.monotonic() - started > timeout_s:
+            raise RuntimeError(f"auphonic_job_timeout:{production_uuid}")
+        time.sleep(interval)
+
+
+def _download_auphonic_audio(production: dict[str, Any], token: str, output: Path, receipts: Receipts) -> Path:
+    output_files = production.get("output_files")
+    if not isinstance(output_files, list) or not output_files:
+        raise RuntimeError("auphonic_missing_output_files")
+    selected = _dict_payload(output_files[0])
+    download_url = selected.get("download_url")
+    if not download_url:
+        raise RuntimeError("auphonic_missing_download_url")
+    receipts.log(
+        "auphonic_download",
+        phase="start",
+        production_uuid=production.get("uuid"),
+        format=selected.get("format"),
+        ending=selected.get("ending"),
+        bytes=selected.get("size"),
+    )
+    parsed = urllib.parse.urlparse(str(download_url))
+    headers = {"Authorization": f"bearer {token}"} if parsed.hostname and parsed.hostname.endswith("auphonic.com") else {}
+    request = urllib.request.Request(str(download_url), headers=headers, method="GET")
+    with urllib.request.urlopen(request, timeout=180) as response:
+        output.write_bytes(response.read())
+    receipts.log("auphonic_download", phase="finish", output=str(output), bytes=output.stat().st_size)
+    return output
+
+
+def _try_auphonic_polish(extracted: Path, run_dir: Path, receipts: Receipts, policy: RunPolicy, cost: CostTracker) -> Path | None:
+    token = os.environ.get("AUPHONIC_API_KEY")
+    if not token:
+        receipts.log("audio_auphonic_parity", status="skipped", reason="AUPHONIC_API_KEY missing", uploaded_media="none")
+        return None
+    preset = os.environ.get("AUPHONIC_PRESET") or os.environ.get("AUPHONIC_PRESET_UUID")
+    output = run_dir / "audio" / "auphonic-polished-audio.m4a"
+    try:
+        policy.require_cloud_allowed("auphonic", receipts)
+        cost.charge("auphonic_audio_estimate", 1.0, provider="auphonic")
+        if os.environ.get("EDDY_V2_FAKE_AUPHONIC"):
+            _fake_cloud_audio(extracted, output, receipts, provider="auphonic")
+            return output if _audio_parity_passes(extracted, output, receipts, provider="auphonic") else None
+        if not preset:
+            raise RuntimeError("AUPHONIC_PRESET missing")
+        production_uuid = _start_auphonic_simple(extracted, token, preset, receipts)
+        production = _wait_for_auphonic(production_uuid, token, receipts)
+        _download_auphonic_audio(production, token, output, receipts)
+        return output if _audio_parity_passes(extracted, output, receipts, provider="auphonic") else None
+    except Exception as exc:
+        receipts.log("audio_auphonic_parity", status="failed", error=str(exc), uploaded_media="audio_extract_only")
+        return None
+
+
+def _try_elevenlabs_isolation(extracted: Path, run_dir: Path, receipts: Receipts, policy: RunPolicy, cost: CostTracker) -> Path | None:
+    token = os.environ.get("ELEVENLABS_API_KEY")
+    if not token:
+        receipts.log("audio_elevenlabs_parity", status="skipped", reason="ELEVENLABS_API_KEY missing", uploaded_media="none")
+        return None
+    output = run_dir / "audio" / "elevenlabs-isolated-audio.m4a"
+    try:
+        policy.require_cloud_allowed("elevenlabs", receipts)
+        cost.charge("elevenlabs_audio_isolation_estimate", 1.0, provider="elevenlabs")
+        if os.environ.get("EDDY_V2_FAKE_ELEVENLABS"):
+            _fake_cloud_audio(extracted, output, receipts, provider="elevenlabs")
+            return output if _audio_parity_passes(extracted, output, receipts, provider="elevenlabs") else None
+
+        body, content_type = _multipart_body(
+            {"file_format": "other"},
+            {"audio": (extracted.name, extracted.read_bytes(), "audio/wav")},
+        )
+        receipts.log("elevenlabs_audio_isolation", phase="start", uploaded_media="audio_extract_only", bytes=extracted.stat().st_size)
+        request = urllib.request.Request(
+            f"{_elevenlabs_api_base()}/audio-isolation",
+            data=body,
+            headers={"xi-api-key": token, "Content-Type": content_type},
+            method="POST",
+        )
+        raw_response = run_dir / "audio" / "elevenlabs-isolation-response.bin"
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                raw_response.write_bytes(response.read())
+                content_type_response = response.headers.get("Content-Type")
+            receipts.log(
+                "elevenlabs_audio_isolation",
+                phase="finish",
+                status_code=getattr(response, "status", None),
+                content_type=content_type_response,
+                bytes=raw_response.stat().st_size,
+            )
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[-1000:]
+            receipts.log("elevenlabs_audio_isolation", phase="finish", status_code=exc.code, error=detail)
+            raise RuntimeError(f"elevenlabs_audio_isolation_failed:{exc.code}") from exc
+        run_command(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(raw_response),
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                str(output),
+            ],
+            receipts,
+            event="ffmpeg",
+            timeout_s=900,
+        )
+        return output if _audio_parity_passes(extracted, output, receipts, provider="elevenlabs") else None
+    except Exception as exc:
+        receipts.log("audio_elevenlabs_parity", status="failed", error=str(exc), uploaded_media="audio_extract_only")
         return None
 
 
@@ -273,19 +523,15 @@ def polish_audio(
         receipts.log("audio_polish", status="pass", selected_backend="descript_studio_sound", output=str(descript_audio))
         return descript_audio
 
-    for provider, env_name, charge in (
-        ("auphonic", "AUPHONIC_API_KEY", 0.25),
-        ("elevenlabs", "ELEVENLABS_API_KEY", 0.25),
-    ):
-        if os.environ.get(env_name):
-            try:
-                policy.require_cloud_allowed(provider, receipts)
-                cost.charge(f"{provider}_audio_probe", charge, provider=provider)
-                receipts.log("audio_cloud_backend", provider=provider, status="not_selected", reason="live adapter not enabled")
-            except Exception as exc:
-                receipts.log("audio_cloud_backend", provider=provider, status="failed", error=str(exc))
-        else:
-            receipts.log("audio_cloud_backend", provider=provider, status="skipped", reason=f"{env_name} missing")
+    auphonic_audio = _try_auphonic_polish(extracted, run_dir, receipts, policy, cost)
+    if auphonic_audio:
+        receipts.log("audio_polish", status="pass", selected_backend="auphonic", output=str(auphonic_audio))
+        return auphonic_audio
+
+    elevenlabs_audio = _try_elevenlabs_isolation(extracted, run_dir, receipts, policy, cost)
+    if elevenlabs_audio:
+        receipts.log("audio_polish", status="pass", selected_backend="elevenlabs_audio_isolation", output=str(elevenlabs_audio))
+        return elevenlabs_audio
 
     polished = audio_dir / "polished-audio.m4a"
     run_command(
