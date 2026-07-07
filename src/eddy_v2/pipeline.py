@@ -14,6 +14,7 @@ from .policy import RunPolicy
 from .qa import validate_launch_package
 from .receipts import Receipts
 from .render import render_long, render_shorts
+from .review import build_review_packet
 from .sources import discover_sources, lock_sources, write_manifest
 
 
@@ -61,8 +62,11 @@ def edit_folder(
         plan = create_edit_plan(sources, run_dir, intent, receipts)
         video = render_long(sources, run_dir, intent, receipts, policy, cost, plan=plan)
         shorts = render_shorts(sources, run_dir, intent, receipts, plan=plan)
-        write_launch_kit(run_dir, intent.as_dict(), video, shorts, plan=plan.as_dict())
-        write_scorecard(run_dir, cost.summary(), long_video=video, shorts=shorts, blockers=blockers, plan=plan.as_dict())
+        review_packet = build_review_packet(run_dir, video, shorts, receipts)
+        if review_packet is None:
+            blockers.append("review_packet_failed")
+        write_launch_kit(run_dir, intent.as_dict(), video, shorts, plan=plan.as_dict(), review_packet=review_packet)
+        write_scorecard(run_dir, cost.summary(), long_video=video, shorts=shorts, blockers=blockers, plan=plan.as_dict(), review_packet=review_packet)
         validate_launch_package(run_dir, video, shorts, receipts)
         receipts.log("gate", name="final_media_probe", status="pass", probe=ffprobe_json(video))
     except Exception as exc:
@@ -78,7 +82,7 @@ def edit_folder(
     return RunResult(run_dir=run_dir, status="blocked" if blockers else "complete", blockers=blockers)
 
 
-def write_launch_kit(run_dir: Path, intent: dict, video: Path, shorts: list[Path], *, plan: dict | None) -> None:
+def write_launch_kit(run_dir: Path, intent: dict, video: Path, shorts: list[Path], *, plan: dict | None, review_packet: Path | None = None) -> None:
     kit = run_dir / "final" / "launch-kit"
     kit.mkdir(parents=True, exist_ok=True)
     chapters = [{"time": "00:00", "title": "Opening", "source": "fallback"}]
@@ -91,6 +95,7 @@ def write_launch_kit(run_dir: Path, intent: dict, video: Path, shorts: list[Path
         "long_video": str(video),
         "shorts": [str(p) for p in shorts],
         "edit_plan": plan,
+        "review_packet": str(review_packet) if review_packet else None,
     }
     (kit / "launch-kit.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     (kit / "README.md").write_text(f"# {data['title']}\n\n{data['description']}\n", encoding="utf-8")
@@ -104,6 +109,7 @@ def write_scorecard(
     shorts: list[Path],
     blockers: list[str],
     plan: dict | None,
+    review_packet: Path | None = None,
 ) -> None:
     score = {
         "status": "blocked" if blockers else "complete",
@@ -115,6 +121,7 @@ def write_scorecard(
         "publishable_8_of_10": False,
         "notes": "Lennox taste score is required before claiming bakeoff victory.",
         "edit_plan": plan,
+        "review_packet": str(review_packet) if review_packet else None,
     }
     (run_dir / "scorecard.json").write_text(json.dumps(score, indent=2), encoding="utf-8")
     (run_dir / "scorecard.md").write_text(
@@ -126,6 +133,7 @@ def write_scorecard(
                 f"- long_video: {score['long_video']}",
                 f"- shorts_count: {score['shorts_count']}",
                 f"- cost: ${cost_summary['spent_usd']:.4f} / ${cost_summary['cap_usd']:.2f}",
+                f"- review_packet: {score['review_packet'] or 'none'}",
                 f"- blockers: {', '.join(blockers) if blockers else 'none'}",
                 "- publishable_8_of_10: false pending Lennox review",
                 "",

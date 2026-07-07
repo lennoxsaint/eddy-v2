@@ -228,6 +228,34 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert any(row["event"] == "motion_composite" and row["surface"] == "shorts" for row in rows)
 
 
+def test_review_packet_is_written_for_completed_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 16)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
+    launch_kit = json.loads((result.run_dir / "final" / "launch-kit" / "launch-kit.json").read_text(encoding="utf-8"))
+    packet_path = Path(scorecard["review_packet"])
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+
+    assert result.status == "complete"
+    assert packet_path == result.run_dir / "final" / "review" / "review-packet.json"
+    assert launch_kit["review_packet"] == str(packet_path)
+    assert (result.run_dir / "final" / "review" / "README.md").exists()
+    assert packet["status"] == "pending_lennox_review"
+    assert packet["publishable_8_of_10"] is False
+    assert {criterion["name"] for criterion in packet["criteria"]} == {
+        "long_edit_story",
+        "motion_graphics",
+        "audio_polish",
+        "shorts_watchability",
+    }
+    assert packet["long_samples"]
+    assert packet["short_samples"]
+    assert all(Path(sample["path"]).exists() for sample in packet["long_samples"] + packet["short_samples"])
+    assert any(row["event"] == "review_packet" and row["status"] == "pass" for row in rows)
+
+
 def test_motion_project_has_dense_plan_and_visual_qa(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     receipts = Receipts(tmp_path / "receipts.jsonl")
