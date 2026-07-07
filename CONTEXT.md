@@ -36,6 +36,10 @@ _Avoid_: Full re-edit, source upload, proof-only audio that is not in the final 
 The machine-readable split in `scorecard.json` and `bakeoff.json` that keeps hero-run media proof, Shorts yield proof, cloud/cost proof, human review, and final publishability separate.
 _Avoid_: One green badge, vague completion, hidden blocker
 
+**Unblock Actions**:
+Secret-safe next actions inside the Proof Layers that name missing environment variables and exact retry/review commands without storing credential values.
+_Avoid_: Secret capture, silent retry, hand-wavy next step
+
 **Transcript Sidecar**:
 A creator-provided `.vtt`, `.srt`, or `.txt` file placed beside the raw footage so Eddy can make semantic chapter and Shorts-anchor decisions without mutating source media.
 _Avoid_: Hidden transcription job, source edit, unreceipted metadata
@@ -54,6 +58,7 @@ _Avoid_: Generic chapter, fake understanding, unproven editorial beat
 - An **8/10 Quality Review** can only mark a run publishable when every score is 8+ and no machine or audio quality blockers remain.
 - An **Audio Proof Retry** may remove the Studio Sound blocker for an existing run, but only after the remuxed long video re-passes media integrity.
 - **Proof Layers** are refreshed after edits, audio retries, and human reviews so a run can show green media proof while final publishability stays blocked.
+- **Unblock Actions** explain exactly how to clear remaining blockers, but they do not execute cloud calls or reviews by themselves.
 
 ## Example Dialogue
 

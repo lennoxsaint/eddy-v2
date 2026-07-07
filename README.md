@@ -89,7 +89,9 @@ Use `eddy review <run> --long-edit <score> --motion <score> --audio <score> --sh
 
 `scorecard.json` includes `proof_layers` so operators can inspect the run without collapsing proof states:
 `hero_run_proof`, `shorts_proof`, `cloud_cost_proof`, `human_review_proof`, and `final_publishability`.
-The same section is refreshed after `eddy edit`, `eddy audio-proof`, and `eddy review`.
+The same section is refreshed after `eddy edit`, `eddy audio-proof`, and `eddy review`. When blocked,
+it includes secret-safe unblock actions: provider environment-variable options, the exact
+`eddy audio-proof` retry command, and the `eddy review` command template. It never records token values.
 
 ## Scope Boundaries
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -135,6 +136,74 @@ def _as_blockers(value: Any) -> list[str]:
     return [str(item) for item in value]
 
 
+def _format_budget(value: float) -> str:
+    return str(int(value)) if value.is_integer() else f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _audio_profile(audio: dict[str, Any]) -> dict[str, Any]:
+    profile_raw = audio.get("cloud_quality_profile")
+    profile = profile_raw if isinstance(profile_raw, dict) else {}
+    audio_raw = profile.get("audio")
+    return audio_raw if isinstance(audio_raw, dict) else cloud_audio_profile()
+
+
+def _review_command(run_dir: Path) -> str:
+    quoted = shlex.quote(str(run_dir))
+    return f"eddy review {quoted} --long-edit 8 --motion 8 --audio 8 --shorts 8"
+
+
+def _audio_retry_command(run_dir: Path, cap: float) -> str:
+    quoted = shlex.quote(str(run_dir))
+    return f"eddy audio-proof {quoted} --cloud-budget {_format_budget(cap)}"
+
+
+def _unblock_actions(
+    *,
+    blockers: list[str],
+    audio_profile: dict[str, Any],
+    audio_retry_command: str,
+    review_command: str,
+) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    if "cloud_audio_credentials_missing_or_failed" in blockers:
+        options_raw = audio_profile.get("audio_quality_unblock_options")
+        options = options_raw if isinstance(options_raw, list) else []
+        actions.append(
+            {
+                "blocker": "cloud_audio_credentials_missing_or_failed",
+                "action": "configure_one_audio_provider",
+                "options": options,
+                "then_run": audio_retry_command,
+            }
+        )
+    if "strong_studio_sound_not_proven" in blockers:
+        strong_raw = audio_profile.get("strong_studio_sound_unblock")
+        strong = strong_raw if isinstance(strong_raw, list) else ["DESCRIPT_API_KEY"]
+        actions.append(
+            {
+                "blocker": "strong_studio_sound_not_proven",
+                "action": "prove_descript_studio_sound_parity",
+                "preferred_required": strong or ["DESCRIPT_API_KEY"],
+                "then_run": audio_retry_command,
+            }
+        )
+    if "pending_lennox_8_of_10_review" in blockers:
+        actions.append(
+            {
+                "blocker": "pending_lennox_8_of_10_review",
+                "action": "record_lennox_quality_review",
+                "required_scores": {
+                    "long_edit": ">=8",
+                    "motion": ">=8",
+                    "audio": ">=8",
+                    "shorts": ">=8",
+                },
+                "then_run": review_command,
+            }
+        )
+    return actions
+
+
 def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None, rows: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     scorecard = scorecard or read_json_object(run_dir / "scorecard.json") or {}
     rows = rows if rows is not None else Receipts(run_dir / "receipts.jsonl").read_all()
@@ -182,6 +251,15 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
     cloud_status = "pass" if cost_within_cap and not audio_blockers else "blocked"
     final_blockers = sorted(set(blockers + audio_blockers + human_blockers))
     final_status = "publishable" if scorecard.get("publishable_8_of_10") is True and not final_blockers else "blocked"
+    audio_profile = _audio_profile(audio)
+    audio_retry_command = _audio_retry_command(run_dir, cap or 25.0)
+    review_command = _review_command(run_dir)
+    unblock_actions = _unblock_actions(
+        blockers=final_blockers,
+        audio_profile=audio_profile,
+        audio_retry_command=audio_retry_command,
+        review_command=review_command,
+    )
 
     return {
         "hero_run_proof": {
@@ -209,15 +287,24 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
             "strong_studio_sound": bool(audio.get("strong_studio_sound")),
             "cloud_polish_proven": bool(audio.get("cloud_polish_proven")),
             "audio_blockers": audio_blockers,
+            "audio_ready": bool(audio_profile.get("audio_ready")),
+            "strong_studio_sound_ready": bool(audio_profile.get("strong_studio_sound_ready")),
+            "configured_providers": audio_profile.get("configured_providers") if isinstance(audio_profile.get("configured_providers"), list) else [],
+            "audio_quality_unblock_options": (
+                audio_profile.get("audio_quality_unblock_options") if isinstance(audio_profile.get("audio_quality_unblock_options"), list) else []
+            ),
+            "audio_retry_command": audio_retry_command,
         },
         "human_review_proof": {
             "status": human_status,
             "publishable_8_of_10": bool(scorecard.get("publishable_8_of_10")),
             "blockers": human_blockers,
+            "review_command_template": review_command,
         },
         "final_publishability": {
             "status": final_status,
             "blockers": final_blockers,
+            "unblock_actions": unblock_actions,
         },
     }
 
@@ -228,6 +315,8 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
     cloud = proof_layers["cloud_cost_proof"]
     human = proof_layers["human_review_proof"]
     final = proof_layers["final_publishability"]
+    audio_retry_command = cloud.get("audio_retry_command") or "none"
+    review_command = human.get("review_command_template") or "none"
     return "\n".join(
         [
             "<!-- proof-layers:start -->",
@@ -240,6 +329,8 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
             f"- human_review_proof: {human['status']}",
             f"- final_publishability: {final['status']}",
             f"- final_blockers: {', '.join(final['blockers']) if final['blockers'] else 'none'}",
+            f"- audio_retry_command: {audio_retry_command}",
+            f"- review_command: {review_command}",
             "<!-- proof-layers:end -->",
         ]
     )

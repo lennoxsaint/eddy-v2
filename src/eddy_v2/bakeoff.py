@@ -238,6 +238,8 @@ def _completion_audit(v2: dict[str, Any]) -> dict[str, Any]:
     final = final_raw if isinstance(final_raw, dict) else {}
     remaining_raw = final.get("blockers", v2.get("blockers", []))
     remaining = [str(blocker) for blocker in remaining_raw] if isinstance(remaining_raw, list) else []
+    actions_raw = final.get("unblock_actions")
+    actions = actions_raw if isinstance(actions_raw, list) else []
     return {
         "repo_setup_proof": {
             "status": "requires_external_verification",
@@ -260,6 +262,7 @@ def _completion_audit(v2: dict[str, Any]) -> dict[str, Any]:
         "cloud_cost_proof": proof_layers.get("cloud_cost_proof", {"status": "missing"}),
         "human_review_proof": proof_layers.get("human_review_proof", {"status": "missing"}),
         "remaining_blockers": remaining,
+        "unblock_actions": actions,
     }
 
 
@@ -364,5 +367,8 @@ def _markdown(report: dict[str, Any]) -> str:
             f"- remaining_blockers: {', '.join(completion['remaining_blockers']) if completion['remaining_blockers'] else 'none'}",
         ]
     )
+    actions = completion.get("unblock_actions")
+    if isinstance(actions, list) and actions:
+        lines.append("- unblock_actions: " + ", ".join(str(action.get("action", "unknown")) for action in actions if isinstance(action, dict)))
     lines.append("")
     return "\n".join(lines)
