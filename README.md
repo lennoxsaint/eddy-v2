@@ -41,6 +41,12 @@ eddy bakeoff /path/to/footage
 
 `--local-only` refuses OpenRouter, Descript, Auphonic, ElevenLabs, cloud render, and image/model uploads. Cloud quality mode is otherwise allowed by default when credentials are configured and cost-capped.
 
+## Audio Quality
+
+When `DESCRIPT_API_KEY` is configured, Eddy tries Descript Studio Sound first using only the extracted audio WAV. It requests a direct upload URL, uploads audio bytes only, prompts Underlord for Studio Sound without timing/content edits, publishes an audio export, downloads it, and marks Strong Studio Sound only if duration parity passes. Tokens and signed URLs are never written to receipts.
+
+For dry tests, set `EDDY_V2_FAKE_DESCRIPT=1` with a dummy `DESCRIPT_API_KEY`; this exercises the Studio Sound receipt/parity path without network egress or credits. `--local-only` refuses Descript even when a key or fake mode is present.
+
 ## Scope Boundaries
 
 Eddy V2 has no publish, upload, scheduling, or hosted app code. It produces files and proof artifacts only.

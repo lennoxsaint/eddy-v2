@@ -23,6 +23,8 @@ from eddy_v2.sources import discover_sources, lock_sources
 @pytest.fixture(autouse=True)
 def no_external_model_calls(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("DESCRIPT_API_KEY", raising=False)
+    monkeypatch.delenv("EDDY_V2_FAKE_DESCRIPT", raising=False)
     monkeypatch.delenv("AUPHONIC_API_KEY", raising=False)
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
 
@@ -196,6 +198,17 @@ def test_edit_plan_skips_leading_silence(tmp_path: Path):
     assert any(row["event"] == "cut_plan" and row["status"] == "pass" for row in rows)
 
 
+def test_audio_extract_uses_planned_long_segment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_silence_then_tone_fixture(tmp_path / "footage")
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=3)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    extract = next(row for row in rows if row["event"] == "audio_extract")
+    assert result.status == "complete"
+    assert extract["start_s"] >= 1.5
+    assert extract["duration_s"] == 3
+
+
 def test_short_starts_distribute_across_long_source():
     starts = select_short_starts([(0, 120)], 120, 3)
     assert len(starts) == 3
@@ -291,9 +304,27 @@ def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest
     folder = make_layered_fixture(tmp_path / "footage", 3)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
     result = edit_folder(folder, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
-    assert any(row["event"] == "audio_descript_parity" for row in rows)
+    assert any(row["event"] == "descript_import" and row["status"] == "fake" for row in rows)
+    assert any(row["event"] == "descript_agent" and row["status"] == "fake" for row in rows)
+    assert any(row["event"] == "descript_publish" and row["status"] == "fake" for row in rows)
+    assert any(row["event"] == "audio_descript_parity" and row["status"] == "pass" for row in rows)
+    assert any(row["event"] == "audio_polish" and row["selected_backend"] == "descript_studio_sound" for row in rows)
+
+
+def test_local_only_refuses_configured_descript_without_upload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    assert result.status == "complete"
+    assert any(row["event"] == "cloud_refused" and row["surface"] == "descript" for row in rows)
+    assert not any(row["event"] == "descript_import" for row in rows)
+    assert any(row["event"] == "audio_polish" and row["selected_backend"] == "local_loudnorm_fallback" for row in rows)
 
 
 def test_cli_doctor_runs():
@@ -301,3 +332,14 @@ def test_cli_doctor_runs():
     assert proc.returncode == 0
     data = json.loads(proc.stdout)
     assert "code-cinema" in data["identities"]
+
+
+def test_public_scrub_check_runs():
+    proc = subprocess.run(
+        [sys.executable, "scripts/public_scrub_check.py"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert proc.returncode == 0
+    assert "public scrub passed" in proc.stdout

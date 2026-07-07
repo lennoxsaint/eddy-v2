@@ -44,14 +44,14 @@ def render_long(
     quarantine = run_dir / "quarantine"
     final_dir.mkdir(parents=True, exist_ok=True)
     quarantine.mkdir(parents=True, exist_ok=True)
-    audio = polish_audio(sources, run_dir, receipts, policy, cost)
+    source_duration = duration_s(sources.camera)
+    start = plan.long_segment.start_s if plan else 0.0
+    target = max(1.0, min(plan.long_segment.duration_s if plan else intent.target_duration_s, source_duration - start))
+    audio = polish_audio(sources, run_dir, receipts, policy, cost, start_s=start, duration_s=target)
     create_motion_project(run_dir, intent.identity, intent.hook, portrait=False)
     run_hyperframes(run_dir / "motion" / "long-overlay", receipts)
 
     output = final_dir / "video.mp4"
-    source_duration = duration_s(sources.camera)
-    start = plan.long_segment.start_s if plan else 0.0
-    target = min(plan.long_segment.duration_s if plan else intent.target_duration_s, source_duration - start)
     long_hook_file = drawtext_file(run_dir, "long-hook", intent.hook, width=52)
     if sources.screen:
         filter_complex = (
@@ -77,8 +77,6 @@ def render_long(
             f"{target:.3f}",
             "-i",
             str(sources.screen),
-            "-ss",
-            f"{start:.3f}",
             "-t",
             f"{target:.3f}",
             "-i",
@@ -112,8 +110,6 @@ def render_long(
             f"{target:.3f}",
             "-i",
             str(sources.camera),
-            "-ss",
-            f"{start:.3f}",
             "-t",
             f"{target:.3f}",
             "-i",
