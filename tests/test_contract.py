@@ -1200,7 +1200,7 @@ def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, mo
     assert result["review_page"]
     assert result["remaining_blockers"] == result["blockers"]
     assert result["current_output_proof"]["status"] == "missing"
-    assert result["winner"] == "undecided_pending_lennox_8_of_10_review"
+    assert result["winner"] == "blocked_remaining_gates"
     assert Path(result["bakeoff_json"]).exists()
     assert Path(result["bakeoff"]).exists()
     report = json.loads(Path(result["bakeoff_json"]).read_text(encoding="utf-8"))
@@ -1533,7 +1533,7 @@ def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatc
     assert any(row["event"] == "bakeoff_compare" and row["status"] == "missing" for row in rows)
     ranking = next(row for row in rows if row["event"] == "bakeoff_ranking")
     assert ranking["status"] == "blocked"
-    assert ranking["winner"] == "undecided_pending_lennox_8_of_10_review"
+    assert ranking["winner"] == "blocked_remaining_gates"
     assert set(ranking["remaining_blockers"]) == {
         "cloud_audio_credentials_missing_or_failed",
         "pending_lennox_8_of_10_review",

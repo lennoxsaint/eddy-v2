@@ -251,9 +251,9 @@ def build_bakeoff_report(
 def _winner(completion_audit: dict[str, Any]) -> str:
     remaining = completion_audit.get("remaining_blockers")
     if isinstance(remaining, list) and remaining:
-        if "pending_lennox_8_of_10_review" in remaining:
+        if remaining == ["pending_lennox_8_of_10_review"]:
             return "undecided_pending_lennox_8_of_10_review"
-        return "blocked"
+        return "blocked_remaining_gates"
     final_raw = completion_audit.get("human_review_proof")
     final = final_raw if isinstance(final_raw, dict) else {}
     if final.get("publishable_8_of_10") is True:
