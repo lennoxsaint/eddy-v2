@@ -31,6 +31,10 @@ from eddy_v2.run_summary import build_run_output_payload
 from eddy_v2.sources import discover_sources, lock_sources
 
 
+def has_arg_pair(argv: list[str], key: str, value: str) -> bool:
+    return any(argv[index] == key and argv[index + 1] == value for index in range(len(argv) - 1))
+
+
 @pytest.fixture(autouse=True)
 def no_external_model_calls(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
@@ -302,6 +306,15 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert any(row["surface"] == "long" and row["mode"] == "keyed_alpha_overlay" for row in motion_rows)
     assert any(row["surface"] == "shorts" and row["mode"] == "keyed_alpha_overlay" for row in motion_rows)
     assert all(row["mode"] != "screen_blend" for row in motion_rows)
+    ffmpeg_starts = [row for row in rows if row["event"] == "ffmpeg" and row.get("phase") == "start"]
+    long_output = str(result.run_dir / "final" / "video.mp4")
+    short_outputs = [str(path) for path in (result.run_dir / "final" / "shorts").glob("short-*.mp4")]
+    assert any(long_output in row["argv"] and has_arg_pair(row["argv"], "-pix_fmt", "yuv420p") for row in ffmpeg_starts)
+    assert short_outputs
+    assert all(
+        any(short in row["argv"] and has_arg_pair(row["argv"], "-pix_fmt", "yuv420p") for row in ffmpeg_starts)
+        for short in short_outputs
+    )
     assert scorecard["proof_layers"]["hero_run_proof"]["status"] == "pass"
     assert scorecard["proof_layers"]["hero_run_proof"]["review_reels"]["long_exists"] is True
     assert scorecard["proof_layers"]["hero_run_proof"]["review_reels"]["shorts_exists"] is True
