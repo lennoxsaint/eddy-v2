@@ -253,6 +253,11 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert scorecard["proof_layers"]["caption_proof"]["sidecar_source"] == "editorial_callouts"
     assert scorecard["proof_layers"]["caption_proof"]["speech_accurate_subtitles"] is False
     assert caption_provenance["warning"] == "speech_accurate_subtitles_not_proven"
+    attempts = scorecard["proof_layers"]["cloud_cost_proof"]["provider_attempts"]
+    assert attempts["descript"]["status"] == "skipped"
+    assert attempts["descript"]["reason"] == "DESCRIPT_API_KEY missing"
+    assert attempts["descript"]["uploaded_media"] == "none"
+    assert attempts["descript"]["missing"] == ["DESCRIPT_API_KEY"]
     assert "pending_lennox_8_of_10_review" in scorecard["proof_layers"]["final_publishability"]["blockers"]
     assert scorecard["proof_layers"]["cloud_cost_proof"]["audio_retry_command"].startswith("eddy audio-proof ")
     assert {
@@ -265,6 +270,7 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert {"configure_one_audio_provider", "prove_descript_studio_sound_parity", "record_lennox_quality_review"} <= actions
     assert "<!-- proof-layers:start -->" in scorecard_md
     assert "- caption_proof: warning (editorial_callouts)" in scorecard_md
+    assert "- audio_provider_descript: skipped (reason: DESCRIPT_API_KEY missing; uploaded_media: none; missing: DESCRIPT_API_KEY)" in scorecard_md
     assert "- audio_retry_command: eddy audio-proof " in scorecard_md
     assert "- review_command: eddy review " in scorecard_md
 
@@ -1004,6 +1010,7 @@ def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_pat
 
     assert retry["status"] == "pass"
     assert retry["strong_studio_sound"] is True
+    assert retry["provider_attempts"]["descript"]["status"] == "pass"
     assert sum(1 for row in rows if row["event"] == "audio_extract") == 1
     assert any(row["event"] == "source_hash" and row["phase"] == "audio_proof_retry" for row in rows)
     assert any(row["event"] == "audio_retry_remux" and row["status"] == "pass" for row in rows)

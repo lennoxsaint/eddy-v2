@@ -147,6 +147,31 @@ def _audio_profile(audio: dict[str, Any]) -> dict[str, Any]:
     return audio_raw if isinstance(audio_raw, dict) else cloud_audio_profile()
 
 
+def _audio_provider_attempts(audio: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    attempts_raw = audio.get("providers")
+    attempts = attempts_raw if isinstance(attempts_raw, dict) else {}
+    profile = _audio_profile(audio)
+    configured_raw = profile.get("providers")
+    configured = configured_raw if isinstance(configured_raw, dict) else {}
+    provider_names = ("descript", "auphonic", "elevenlabs")
+    result: dict[str, dict[str, Any]] = {}
+    for provider in provider_names:
+        attempt_raw = attempts.get(provider)
+        attempt = attempt_raw if isinstance(attempt_raw, dict) else {}
+        provider_profile_raw = configured.get(provider)
+        provider_profile = provider_profile_raw if isinstance(provider_profile_raw, dict) else {}
+        result[provider] = {
+            "status": attempt.get("status") or "missing",
+            "reason": attempt.get("reason"),
+            "error": attempt.get("error"),
+            "uploaded_media": attempt.get("uploaded_media"),
+            "configured": bool(provider_profile.get("configured")),
+            "missing": provider_profile.get("missing") if isinstance(provider_profile.get("missing"), list) else [],
+            "unlocks": provider_profile.get("unlocks"),
+        }
+    return result
+
+
 def _int_value(value: Any) -> int:
     try:
         return int(value)
@@ -302,6 +327,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
     final_blockers = sorted(set(blockers + audio_blockers + human_blockers))
     final_status = "publishable" if scorecard.get("publishable_8_of_10") is True and not final_blockers else "blocked"
     audio_profile = _audio_profile(audio)
+    audio_provider_attempts = _audio_provider_attempts(audio)
     audio_retry_command = _audio_retry_command(run_dir, cap or 25.0)
     review_command = _review_command(run_dir)
     caption = _caption_proof(run_dir, rows)
@@ -341,6 +367,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
             "audio_ready": bool(audio_profile.get("audio_ready")),
             "strong_studio_sound_ready": bool(audio_profile.get("strong_studio_sound_ready")),
             "configured_providers": audio_profile.get("configured_providers") if isinstance(audio_profile.get("configured_providers"), list) else [],
+            "provider_attempts": audio_provider_attempts,
             "audio_quality_unblock_options": (
                 audio_profile.get("audio_quality_unblock_options") if isinstance(audio_profile.get("audio_quality_unblock_options"), list) else []
             ),
@@ -370,6 +397,17 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
     final = proof_layers["final_publishability"]
     audio_retry_command = cloud.get("audio_retry_command") or "none"
     review_command = human.get("review_command_template") or "none"
+    provider_attempts = cloud.get("provider_attempts") if isinstance(cloud.get("provider_attempts"), dict) else {}
+    provider_lines = []
+    for provider in ("descript", "auphonic", "elevenlabs"):
+        attempt_raw = provider_attempts.get(provider) if isinstance(provider_attempts, dict) else {}
+        attempt = attempt_raw if isinstance(attempt_raw, dict) else {}
+        status = attempt.get("status") or "missing"
+        reason = attempt.get("reason") or attempt.get("error") or "none"
+        uploaded = attempt.get("uploaded_media") or "unknown"
+        missing = attempt.get("missing") if isinstance(attempt.get("missing"), list) else []
+        missing_text = ",".join(str(item) for item in missing) if missing else "none"
+        provider_lines.append(f"- audio_provider_{provider}: {status} (reason: {reason}; uploaded_media: {uploaded}; missing: {missing_text})")
     return "\n".join(
         [
             "<!-- proof-layers:start -->",
@@ -383,6 +421,7 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
             f"- caption_proof: {caption.get('status', 'missing')} ({caption.get('sidecar_source', 'unknown')})",
             f"- final_publishability: {final['status']}",
             f"- final_blockers: {', '.join(final['blockers']) if final['blockers'] else 'none'}",
+            *provider_lines,
             f"- audio_retry_command: {audio_retry_command}",
             f"- review_command: {review_command}",
             "<!-- proof-layers:end -->",
