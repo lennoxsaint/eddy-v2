@@ -101,3 +101,4 @@ The six approved identities are frozen systems, not restyleable themes:
 
 HyperFrames is the default motion renderer. V2 generates run-local HyperFrames projects and receipts lint, inspect, and render attempts.
 Long-form overlays keep the first 60 seconds dense, then switch to sparse transcript- or cut-plan-aware beat cards for later sections. The motion plan records `dense_first_60_s`, `sparse_overlay_count`, and each sparse overlay in `motion-plan.json`.
+Every motion project also writes `storyboard.md`, `storyboard.html`, and `motion-collision-proof.json`; the motion artifact gate refuses missing storyboard or failed collision proof before compositing is considered safe.

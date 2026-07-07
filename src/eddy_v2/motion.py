@@ -138,6 +138,219 @@ def _beat_script(beats: list[MotionBeat]) -> str:
     return "\n".join(lines)
 
 
+def _seconds(value: float | str) -> str:
+    return f"{float(value):.3f}s"
+
+
+def _write_storyboard(
+    project: Path,
+    *,
+    identity_slug: str,
+    surface: str,
+    duration_s: float,
+    scenes: list[dict[str, float | str]],
+    beats: list[MotionBeat],
+    width: int,
+    height: int,
+    receipts: Receipts | None,
+) -> None:
+    scene_rows = [
+        f'| {scene["id"]} | {scene["label"]} | {_seconds(scene["start_s"])} | {_seconds(scene["duration_s"])} |'
+        for scene in scenes
+    ]
+    beat_rows = [
+        f'| {beat["id"]} | {beat["kicker"]} | {_seconds(beat["start_s"])} | {_seconds(beat["duration_s"])} | {beat["title"]} | {beat["source"]} |'
+        for beat in beats
+    ] or ["| none | none | n/a | n/a | n/a | n/a |"]
+    storyboard_md = "\n".join(
+        [
+            "# Eddy V2 Motion Storyboard",
+            "",
+            f"- identity: {identity_slug}",
+            f"- surface: {surface}",
+            f"- duration: {_seconds(duration_s)}",
+            f"- stage: {width}x{height}",
+            "- first_60s: dense identity motion",
+            "- later_sections: sparse content-aware overlays",
+            "",
+            "## Dense Scenes",
+            "",
+            "| id | label | start | duration |",
+            "| --- | --- | ---: | ---: |",
+            *scene_rows,
+            "",
+            "## Sparse Overlays",
+            "",
+            "| id | kicker | start | duration | title | source |",
+            "| --- | --- | ---: | ---: | --- | --- |",
+            *beat_rows,
+            "",
+        ]
+    )
+    (project / "storyboard.md").write_text(storyboard_md, encoding="utf-8")
+
+    scene_cards = "\n".join(
+        f'<section><b>{html.escape(str(scene["label"]))}</b><span>{_seconds(scene["start_s"])} - {_seconds(float(scene["start_s"]) + float(scene["duration_s"]))}</span></section>'
+        for scene in scenes
+    )
+    beat_cards = "\n".join(
+        f'<section><b>{html.escape(str(beat["kicker"]))}</b><span>{_seconds(beat["start_s"])} - {html.escape(str(beat["title"]))}</span></section>'
+        for beat in beats
+    ) or "<section><b>NO SPARSE OVERLAYS</b><span>dense motion only</span></section>"
+    (project / "storyboard.html").write_text(
+        f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Eddy V2 Motion Storyboard</title>
+  <style>
+    body {{ margin: 0; padding: 32px; background: #101010; color: #f7f7f2; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+    main {{ max-width: 920px; margin: 0 auto; display: grid; gap: 20px; }}
+    h1, h2 {{ margin: 0; letter-spacing: 0; }}
+    .meta {{ color: #b7b7aa; display: grid; gap: 6px; }}
+    .grid {{ display: grid; gap: 10px; }}
+    section {{ border: 1px solid #34342f; border-left: 8px solid #f3c537; padding: 16px 18px; display: flex; justify-content: space-between; gap: 20px; }}
+    b {{ color: #ffffff; }}
+    span {{ color: #d5d5c8; text-align: right; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Eddy V2 Motion Storyboard</h1>
+    <div class="meta">
+      <div>identity: {html.escape(identity_slug)}</div>
+      <div>surface: {html.escape(surface)}</div>
+      <div>duration: {_seconds(duration_s)}</div>
+      <div>stage: {width}x{height}</div>
+    </div>
+    <h2>Dense Scenes</h2>
+    <div class="grid">{scene_cards}</div>
+    <h2>Sparse Overlays</h2>
+    <div class="grid">{beat_cards}</div>
+  </main>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+    if receipts:
+        receipts.log(
+            "motion_storyboard",
+            status="pass",
+            project=str(project),
+            storyboard_md=str(project / "storyboard.md"),
+            storyboard_html=str(project / "storyboard.html"),
+            scene_count=len(scenes),
+            sparse_overlay_count=len(beats),
+        )
+
+
+def _box(label: str, x: float, y: float, width: float, height: float) -> dict[str, float | str]:
+    return {"label": label, "x": x, "y": y, "width": width, "height": height}
+
+
+def _boxes_overlap(a: dict[str, float | str], b: dict[str, float | str]) -> bool:
+    ax1 = float(a["x"])
+    ay1 = float(a["y"])
+    ax2 = ax1 + float(a["width"])
+    ay2 = ay1 + float(a["height"])
+    bx1 = float(b["x"])
+    by1 = float(b["y"])
+    bx2 = bx1 + float(b["width"])
+    by2 = by1 + float(b["height"])
+    return ax1 < bx2 and ax2 > bx1 and ay1 < by2 and ay2 > by1
+
+
+def _write_collision_proof(
+    project: Path,
+    *,
+    surface: str,
+    duration_s: float,
+    scenes: list[dict[str, float | str]],
+    beats: list[MotionBeat],
+    width: int,
+    height: int,
+    receipts: Receipts | None,
+) -> None:
+    checks: list[dict[str, object]] = []
+
+    def check(name: str, passed: bool, **details: object) -> None:
+        checks.append({"name": name, "status": "pass" if passed else "failed", **details})
+
+    scene_intervals = [
+        (str(scene["id"]), float(scene["start_s"]), float(scene["start_s"]) + float(scene["duration_s"])) for scene in scenes
+    ]
+    scene_payload = [{"id": scene_id, "start_s": start_s, "end_s": end_s} for scene_id, start_s, end_s in scene_intervals]
+    sorted_intervals = sorted(scene_intervals, key=lambda item: item[1])
+    scene_bounds_ok = all(start_s >= 0 and end_s <= min(duration_s, 60.0) + 0.75 for _, start_s, end_s in sorted_intervals)
+    scene_order_ok = all(
+        sorted_intervals[index][2] <= sorted_intervals[index + 1][1] + 0.001
+        for index in range(max(0, len(sorted_intervals) - 1))
+    )
+    check("dense_scene_bounds", scene_bounds_ok, intervals=scene_payload)
+    check("dense_scene_order", scene_order_ok, intervals=scene_payload)
+
+    beat_intervals = [
+        (str(beat["id"]), float(beat["start_s"]), float(beat["start_s"]) + float(beat["duration_s"])) for beat in beats
+    ]
+    beat_payload = [{"id": beat_id, "start_s": start_s, "end_s": end_s} for beat_id, start_s, end_s in beat_intervals]
+    beat_bounds_ok = all(start_s >= 60.0 and end_s <= duration_s + 0.001 for _, start_s, end_s in beat_intervals)
+    sorted_beats = sorted(beat_intervals, key=lambda item: item[1])
+    beat_gap_ok = all(
+        sorted_beats[index + 1][1] - sorted_beats[index][1] >= 12.0
+        for index in range(max(0, len(sorted_beats) - 1))
+    )
+    check("sparse_overlay_bounds", beat_bounds_ok, intervals=beat_payload)
+    check("sparse_overlay_spacing", beat_gap_ok, intervals=beat_payload)
+
+    if surface == "shorts":
+        protected_regions = [
+            _box("chrome", 44, 44, width - 88, 28),
+            _box("frameline", 44, 96, width - 88, 1),
+        ]
+        beat_regions: list[dict[str, float | str]] = []
+    else:
+        protected_regions = [
+            _box("chrome", 64, 42, width - 128, 28),
+            _box("frameline", 64, 94, width - 128, 1),
+        ]
+        beat_regions = [_box("beat_card", width - 104 - 540, 172, 540, 220)] if beats else []
+        receipt_region = _box("receipt_card", 168, 430, 560, 320)
+        for beat_region in beat_regions:
+            check(
+                "beat_card_avoids_receipt_card",
+                not _boxes_overlap(beat_region, receipt_region),
+                beat_region=beat_region,
+                receipt_region=receipt_region,
+            )
+    for beat_region in beat_regions:
+        inside_stage = (
+            float(beat_region["x"]) >= 0
+            and float(beat_region["y"]) >= 0
+            and float(beat_region["x"]) + float(beat_region["width"]) <= width
+            and float(beat_region["y"]) + float(beat_region["height"]) <= height
+        )
+        check("beat_card_inside_stage", inside_stage, beat_region=beat_region, stage={"width": width, "height": height})
+        for protected in protected_regions:
+            check(
+                f'beat_card_avoids_{protected["label"]}',
+                not _boxes_overlap(beat_region, protected),
+                beat_region=beat_region,
+                protected_region=protected,
+            )
+    status = "pass" if all(item["status"] == "pass" for item in checks) else "failed"
+    proof = {
+        "status": status,
+        "surface": surface,
+        "duration_s": duration_s,
+        "stage": {"width": width, "height": height},
+        "checks": checks,
+    }
+    (project / "motion-collision-proof.json").write_text(json.dumps(proof, indent=2), encoding="utf-8")
+    if receipts:
+        receipts.log("motion_collision_proof", status=status, project=str(project), check_count=len(checks))
+
+
 def create_motion_project(
     run_dir: Path,
     identity_slug: str,
@@ -179,6 +392,28 @@ def create_motion_project(
         "sparse_overlays": beats,
     }
     (project / "motion-plan.json").write_text(json.dumps(motion_plan, indent=2), encoding="utf-8")
+    surface = "shorts" if portrait else "long"
+    _write_storyboard(
+        project,
+        identity_slug=identity.slug,
+        surface=surface,
+        duration_s=duration,
+        scenes=scenes,
+        beats=beats,
+        width=width,
+        height=height,
+        receipts=receipts,
+    )
+    _write_collision_proof(
+        project,
+        surface=surface,
+        duration_s=duration,
+        scenes=scenes,
+        beats=beats,
+        width=width,
+        height=height,
+        receipts=receipts,
+    )
     if receipts:
         receipts.log("motion_plan", status="pass", project=str(project), **motion_plan)
         if beats:

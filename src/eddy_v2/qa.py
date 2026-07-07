@@ -85,10 +85,13 @@ def validate_motion_artifact(project: Path, output: Path, receipts: Receipts, *,
     gate = "motion_artifact"
     required_files = [
         "frame.md",
+        "storyboard.md",
+        "storyboard.html",
         "identity.css",
         "blocks.json",
         "index.html",
         "motion-plan.json",
+        "motion-collision-proof.json",
         "motion-lint.json",
         "motion-inspect.json",
     ]
@@ -105,6 +108,17 @@ def validate_motion_artifact(project: Path, output: Path, receipts: Receipts, *,
     if not stream or (stream.get("width"), stream.get("height")) != expected:
         receipts.log("gate", name=gate, status="failed", reason="unexpected_motion_geometry", output=str(output), expected=expected)
         raise RuntimeError("motion_artifact_corrupt")
+    collision = json.loads((project / "motion-collision-proof.json").read_text(encoding="utf-8"))
+    if collision.get("status") != "pass":
+        receipts.log("gate", name="motion_collision_proof", status="failed", project=str(project), proof=collision)
+        raise RuntimeError("motion_collision_proof_failed")
+    receipts.log(
+        "gate",
+        name="motion_collision_proof",
+        status="pass",
+        project=str(project),
+        check_count=len(collision.get("checks", [])),
+    )
     receipts.log("gate", name=gate, status="pass", output=str(output), project=str(project), width=stream.get("width"), height=stream.get("height"))
     validate_motion_visual_qa(output, project, receipts)
 

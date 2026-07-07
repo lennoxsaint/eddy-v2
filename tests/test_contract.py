@@ -282,6 +282,7 @@ def test_motion_project_has_dense_plan_and_visual_qa(tmp_path: Path, monkeypatch
     rows = receipts.read_all()
     plan = json.loads((project / "motion-plan.json").read_text(encoding="utf-8"))
     visual = json.loads((project / "motion-visual-qa.json").read_text(encoding="utf-8"))
+    collision = json.loads((project / "motion-collision-proof.json").read_text(encoding="utf-8"))
     html = (project / "index.html").read_text(encoding="utf-8")
     assert plan["dense_first_60_s"] == 60
     assert plan["scene_count"] == 3
@@ -290,7 +291,13 @@ def test_motion_project_has_dense_plan_and_visual_qa(tmp_path: Path, monkeypatch
     assert plan["composite_mode"] == "screen_blend"
     assert html.count('class="scene"') == 3
     assert "window.__timelines[\"eddy-v2\"]" in html
+    assert (project / "storyboard.md").exists()
+    assert (project / "storyboard.html").exists()
+    assert collision["status"] == "pass"
     assert visual["unique_frame_hashes"] >= 2
+    assert any(row["event"] == "motion_storyboard" and row["status"] == "pass" for row in rows)
+    assert any(row["event"] == "motion_collision_proof" and row["status"] == "pass" for row in rows)
+    assert any(row["event"] == "gate" and row["name"] == "motion_collision_proof" and row["status"] == "pass" for row in rows)
     assert any(row["event"] == "motion_plan" and row["status"] == "pass" for row in rows)
     assert any(row["event"] == "gate" and row["name"] == "motion_visual_qa" and row["status"] == "pass" for row in rows)
 
@@ -314,6 +321,8 @@ def test_motion_project_adds_sparse_content_overlays_after_first_60(tmp_path: Pa
         receipts=receipts,
     )
     motion_plan = json.loads((project / "motion-plan.json").read_text(encoding="utf-8"))
+    storyboard = (project / "storyboard.md").read_text(encoding="utf-8")
+    collision = json.loads((project / "motion-collision-proof.json").read_text(encoding="utf-8"))
     html = (project / "index.html").read_text(encoding="utf-8")
     rows = receipts.read_all()
 
@@ -324,6 +333,9 @@ def test_motion_project_adds_sparse_content_overlays_after_first_60(tmp_path: Pa
     assert "DENSE = Math.min(60, D)" in html
     assert 'class="beat-card"' in html
     assert "Second section shows real context" in html
+    assert "Second section shows real context" in storyboard
+    assert collision["status"] == "pass"
+    assert any(check["name"] == "beat_card_avoids_receipt_card" for check in collision["checks"])
     assert any(row["event"] == "motion_content_beats" and row["beat_count"] >= 1 for row in rows)
 
 
