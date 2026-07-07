@@ -55,6 +55,7 @@ _Avoid_: Assuming `.srt` means verbatim, hidden transcription claim, unlabelled 
 ## Relationships
 
 - A **Proof-Gated One-Command** run may use the **Cloud Quality Profile** unless `--local-only` is set.
+- The **Cloud Quality Profile** covers OpenRouter model autonomy and external audio providers separately, so a run can have model intent ready while Studio Sound remains blocked.
 - An **Identity Pack** drives all default HyperFrames motion surfaces.
 - A **Quarantined Partial** may be cited in receipts, but it must not appear in `final/`.
 - The **Bakeoff Hero Video** is the acceptance target after the full V2 feature floor exists.

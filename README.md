@@ -31,8 +31,9 @@ eddy doctor
 ```
 
 `eddy doctor` fails if any required runtime tool is missing: `ffmpeg`, `ffprobe`, `node`, or `npx`.
-It also reports a secret-safe Cloud Quality Profile for audio, including which provider credentials
-are configured and the exact environment variable options needed to unblock cloud audio proof.
+It also reports a secret-safe Cloud Quality Profile for models and audio, including whether OpenRouter
+autonomy is configured, which audio provider credentials are present, and the exact environment
+variable options needed to unblock cloud model or audio proof.
 
 ## CLI
 

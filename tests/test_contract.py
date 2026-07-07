@@ -12,7 +12,7 @@ from eddy_v2.audio_retry import retry_audio_proof
 from eddy_v2.bakeoff import build_bakeoff_report
 from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json
-from eddy_v2.cloud_quality import cloud_audio_profile
+from eddy_v2.cloud_quality import cloud_audio_profile, cloud_model_profile
 from eddy_v2.doctor import doctor_payload
 from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import TOOLS, handle
@@ -1125,6 +1125,8 @@ def test_cli_doctor_runs():
         assert data["missing_required_runtime_tools"] == []
         assert data["cloud_quality_profile"]["audio"]["audio_ready"] is False
         assert data["cloud_quality_profile"]["audio"]["providers"]["descript"]["missing"] == ["DESCRIPT_API_KEY"]
+        assert data["cloud_quality_profile"]["models"]["model_ready"] is False
+        assert data["cloud_quality_profile"]["models"]["providers"]["openrouter"]["missing"] == ["OPENROUTER_API_KEY"]
         for tool in ("ffmpeg", "ffprobe", "node", "npx"):
             assert data["required_runtime_tools"][tool] is True
         assert "code-cinema" in data["identities"]
@@ -1144,15 +1146,35 @@ def test_cloud_audio_profile_lists_exact_unblock_options_without_secret_values()
     ]
 
 
-def test_doctor_reports_configured_cloud_audio_without_exposing_secret_values():
-    data = doctor_payload(lambda name: f"/usr/bin/{name}", {"DESCRIPT_API_KEY": "not-for-output"})
+def test_cloud_model_profile_lists_exact_unblock_options_without_secret_values():
+    data = cloud_model_profile({"OPENROUTER_API_KEY": "secretish", "EDDY_V2_OPENROUTER_EDITOR_MODEL": "test/editor"})
+
+    assert data["model_ready"] is True
+    assert data["configured_providers"] == ["openrouter"]
+    assert data["providers"]["openrouter"]["missing"] == []
+    assert data["providers"]["openrouter"]["editor_model"] == "test/editor"
+    assert data["providers"]["openrouter"]["critic_model"] == "test/editor"
+    assert "secretish" not in json.dumps(data)
+
+
+def test_doctor_reports_configured_cloud_quality_without_exposing_secret_values():
+    data = doctor_payload(
+        lambda name: f"/usr/bin/{name}",
+        {"DESCRIPT_API_KEY": "not-for-output", "OPENROUTER_API_KEY": "also-not-for-output", "EDDY_V2_OPENROUTER_CRITIC_MODEL": "test/critic"},
+    )
     audio = data["cloud_quality_profile"]["audio"]
+    models = data["cloud_quality_profile"]["models"]
 
     assert audio["audio_ready"] is True
     assert audio["strong_studio_sound_ready"] is True
     assert audio["configured_providers"] == ["descript"]
     assert audio["providers"]["descript"]["missing"] == []
-    assert "not-for-output" not in json.dumps(audio)
+    assert models["model_ready"] is True
+    assert models["configured_providers"] == ["openrouter"]
+    assert models["providers"]["openrouter"]["missing"] == []
+    assert models["providers"]["openrouter"]["critic_model"] == "test/critic"
+    assert "not-for-output" not in json.dumps(data)
+    assert "also-not-for-output" not in json.dumps(data)
 
 
 def test_doctor_fails_when_motion_runtime_is_missing():

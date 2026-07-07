@@ -4,6 +4,8 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
+DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-5"
+
 
 def _present(environ: Mapping[str, str], name: str) -> bool:
     return bool(environ.get(name))
@@ -66,4 +68,33 @@ def cloud_audio_profile(environ: Mapping[str, str] | None = None) -> dict[str, A
             },
         ],
         "strong_studio_sound_unblock": [] if descript_ready else ["DESCRIPT_API_KEY"],
+    }
+
+
+def cloud_model_profile(environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    env = os.environ if environ is None else environ
+    openrouter_ready = _present(env, "OPENROUTER_API_KEY")
+    editor_model = env.get("EDDY_V2_OPENROUTER_EDITOR_MODEL") or env.get("EDDY_V2_OPENROUTER_MODEL") or DEFAULT_OPENROUTER_MODEL
+    critic_model = env.get("EDDY_V2_OPENROUTER_CRITIC_MODEL") or editor_model
+    return {
+        "model_ready": openrouter_ready,
+        "configured_providers": ["openrouter"] if openrouter_ready else [],
+        "providers": {
+            "openrouter": {
+                "configured": openrouter_ready,
+                "missing": [] if openrouter_ready else ["OPENROUTER_API_KEY"],
+                "editor_model": editor_model,
+                "critic_model": critic_model,
+                "unlocks": "editor_critic_intent_loop",
+                "fallback": "deterministic_default_intent",
+            }
+        },
+        "model_unblock_options": [
+            {
+                "provider": "openrouter",
+                "required": ["OPENROUTER_API_KEY"],
+                "unlocks": "editor_critic_intent_loop",
+                "fallback": "deterministic_default_intent",
+            }
+        ],
     }
