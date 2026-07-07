@@ -199,15 +199,6 @@ def build_bakeoff_report(
             "reason": "current_output_proof_missing",
             "searched": str(CURRENT_EDDY_RUNS),
         }
-    if receipts:
-        receipts.log(
-            "bakeoff_compare",
-            status=current_output_proof["status"],
-            report=str(v2_run_dir / "bakeoff.json"),
-            current_run=current_output_proof.get("run_dir"),
-            reason=current_output_proof.get("reason"),
-        )
-
     v2 = summarize_run(v2_run_dir, label="eddy-v2")
     current: dict[str, Any]
     if discovered_current:
@@ -217,9 +208,11 @@ def build_bakeoff_report(
 
     comparison = _comparison(v2, current)
     completion_audit = _completion_audit(v2)
+    winner = "undecided_pending_lennox_8_of_10_review"
+    remaining_blockers = completion_audit["remaining_blockers"]
     report = {
         "hero_folder": str(folder.resolve()),
-        "winner": "undecided_pending_lennox_8_of_10_review",
+        "winner": winner,
         "winner_bar": "Lennox would publish it; long edit, motion, audio, and Shorts are each 8/10+.",
         "current_output_proof": current_output_proof,
         "candidates": {"eddy_v2": v2, "current_eddy": current},
@@ -228,6 +221,24 @@ def build_bakeoff_report(
     }
     (v2_run_dir / "bakeoff.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (v2_run_dir / "bakeoff.md").write_text(_markdown(report), encoding="utf-8")
+    if receipts:
+        receipts.log(
+            "bakeoff_compare",
+            status=current_output_proof["status"],
+            report=str(v2_run_dir / "bakeoff.json"),
+            current_run=current_output_proof.get("run_dir"),
+            reason=current_output_proof.get("reason"),
+        )
+        receipts.log(
+            "bakeoff_ranking",
+            status="blocked" if remaining_blockers else "pass",
+            winner=winner,
+            reason=";".join(remaining_blockers) if remaining_blockers else "all_gates_passed",
+            comparison_status=comparison["status"],
+            current_output_proof_status=current_output_proof["status"],
+            final_publishability_status=completion_audit["human_review_proof"].get("status", "missing"),
+            remaining_blockers=remaining_blockers,
+        )
     return report
 
 

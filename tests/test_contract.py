@@ -1401,6 +1401,15 @@ def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatc
     assert (result.run_dir / "bakeoff.json").exists()
     assert (result.run_dir / "bakeoff.md").exists()
     assert any(row["event"] == "bakeoff_compare" and row["status"] == "missing" for row in rows)
+    ranking = next(row for row in rows if row["event"] == "bakeoff_ranking")
+    assert ranking["status"] == "blocked"
+    assert ranking["winner"] == "undecided_pending_lennox_8_of_10_review"
+    assert set(ranking["remaining_blockers"]) == {
+        "cloud_audio_credentials_missing_or_failed",
+        "pending_lennox_8_of_10_review",
+        "strong_studio_sound_not_proven",
+    }
+    assert ranking["reason"] == ";".join(ranking["remaining_blockers"])
 
 
 def test_bakeoff_compares_explicit_current_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
