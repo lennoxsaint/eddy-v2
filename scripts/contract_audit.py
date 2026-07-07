@@ -63,6 +63,22 @@ REQUIRED_CONTEXT_TERMS = [
     "Bakeoff Hero Video",
 ]
 
+REQUIRED_PACKAGE_DATA = {
+    "identities_data/*/*",
+    "identities_data/*/assets/*",
+}
+
+REQUIRED_THREADIFY_FC_ASSETS = {
+    "agent-keyed.png",
+    "done-keyed.png",
+    "fc-ring.png",
+    "hero-keyed.png",
+    "receipt-keyed.png",
+    "stuck-keyed.png",
+    "think-keyed.png",
+    "threadify-needle.png",
+}
+
 PERMISSIVE_BUILD_DEPS = {"setuptools", "wheel"}
 PERMISSIVE_DEV_DEPS = {"mypy", "pytest", "pytest-cov", "ruff"}
 
@@ -127,6 +143,10 @@ def main() -> int:
     subcommands = _subcommands()
     mcp_tools = _mcp_tools()
     identity_slugs = _identity_slugs()
+    package_data = set(project.get("tool", {}).get("setuptools", {}).get("package-data", {}).get("eddy_v2", []))
+    threadify_fc_assets = {
+        path.name for path in (SRC / "eddy_v2" / "identities_data" / "threadify-fc" / "assets").glob("*.png")
+    }
     context = (ROOT / "CONTEXT.md").read_text(encoding="utf-8")
     forbidden_publication = _scan_publication_integrations()
 
@@ -140,6 +160,8 @@ def main() -> int:
         "frozen_identity_pack": identity_slugs == REQUIRED_IDENTITIES,
         "required_docs_present": all(path.exists() for path in REQUIRED_DOCS),
         "required_context_terms": all(term in context for term in REQUIRED_CONTEXT_TERMS),
+        "identity_assets_packaged": REQUIRED_PACKAGE_DATA <= package_data,
+        "required_threadify_fc_assets_present": threadify_fc_assets == REQUIRED_THREADIFY_FC_ASSETS,
         "no_hosted_app_dependencies": not any(dep in runtime_deps or dep in dev_deps for dep in {"flask", "fastapi", "django", "streamlit", "uvicorn"}),
         "no_public_publish_integrations": forbidden_publication == [],
     }
@@ -153,6 +175,8 @@ def main() -> int:
             "cli_subcommands": sorted(subcommands),
             "mcp_tools": sorted(mcp_tools),
             "identities": sorted(identity_slugs),
+            "package_data": sorted(package_data),
+            "threadify_fc_assets": sorted(threadify_fc_assets),
             "forbidden_publication_findings": forbidden_publication,
         },
     }

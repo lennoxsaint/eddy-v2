@@ -23,7 +23,10 @@ eddy-v2-mcp = "eddy_v2.mcp_server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-eddy_v2 = ["identities_data/*/*"]
+eddy_v2 = [
+    "identities_data/*/*",
+    "identities_data/*/assets/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
