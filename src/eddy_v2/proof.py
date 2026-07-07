@@ -518,6 +518,45 @@ def upsert_scorecard_proof_markdown(path: Path, proof_layers: dict[str, Any]) ->
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _receipt_final_blockers(receipts: Receipts, proof_layers: dict[str, Any]) -> None:
+    final_raw = proof_layers.get("final_publishability")
+    final = final_raw if isinstance(final_raw, dict) else {}
+    blockers = _as_blockers(final.get("blockers"))
+    previous_blockers: list[str] = []
+    for row in reversed(receipts.read_all()):
+        if row.get("event") == "blocker_snapshot" and row.get("scope") == "final_publishability":
+            previous_blockers = _as_blockers(row.get("blockers"))
+            break
+    actions_raw = final.get("unblock_actions")
+    actions = actions_raw if isinstance(actions_raw, list) else []
+    action_by_blocker = {
+        str(action.get("blocker")): action for action in actions if isinstance(action, dict) and action.get("blocker")
+    }
+    for blocker in sorted(set(previous_blockers) - set(blockers)):
+        receipts.log(
+            "blocker",
+            code=blocker,
+            status="resolved",
+            scope="final_publishability",
+        )
+    receipts.log(
+        "blocker_snapshot",
+        scope="final_publishability",
+        status=str(final.get("status") or ("blocked" if blockers else "clear")),
+        blockers=blockers,
+    )
+    for blocker in blockers:
+        action = action_by_blocker.get(blocker, {})
+        receipts.log(
+            "blocker",
+            code=blocker,
+            status="active",
+            scope="final_publishability",
+            unblock_action=action.get("action"),
+            then_run=action.get("then_run"),
+        )
+
+
 def refresh_scorecard_proof_layers(
     run_dir: Path,
     *,
@@ -538,6 +577,8 @@ def refresh_scorecard_proof_layers(
     payload["proof_layers"] = build_proof_layers(run_dir, scorecard=payload, rows=rows)
     scorecard_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     upsert_scorecard_proof_markdown(run_dir / "scorecard.md", payload["proof_layers"])
+    if receipts:
+        _receipt_final_blockers(receipts, payload["proof_layers"])
     return payload
 
 

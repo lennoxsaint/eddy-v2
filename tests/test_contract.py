@@ -288,6 +288,20 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert attempts["descript"]["missing"] == ["DESCRIPT_API_KEY"]
     assert "pending_lennox_8_of_10_review" in scorecard["proof_layers"]["final_publishability"]["blockers"]
     assert scorecard["proof_layers"]["cloud_cost_proof"]["audio_retry_command"].startswith("eddy audio-proof ")
+    final_blocker_rows = [
+        row for row in rows if row["event"] == "blocker" and row.get("scope") == "final_publishability" and row.get("status") == "active"
+    ]
+    assert {row["code"] for row in final_blocker_rows} >= {
+        "cloud_audio_credentials_missing_or_failed",
+        "pending_lennox_8_of_10_review",
+        "strong_studio_sound_not_proven",
+    }
+    snapshot = [row for row in rows if row["event"] == "blocker_snapshot" and row.get("scope") == "final_publishability"][-1]
+    assert set(snapshot["blockers"]) >= {
+        "cloud_audio_credentials_missing_or_failed",
+        "pending_lennox_8_of_10_review",
+        "strong_studio_sound_not_proven",
+    }
     assert {
         "provider": "descript",
         "required": ["DESCRIPT_API_KEY"],
@@ -1281,6 +1295,15 @@ def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_pat
     assert scorecard["proof_layers"]["cloud_cost_proof"]["status"] == "pass"
     assert scorecard["proof_layers"]["final_publishability"]["status"] == "blocked"
     assert "pending_lennox_8_of_10_review" in scorecard["proof_layers"]["final_publishability"]["blockers"]
+    final_blocker_rows = [
+        row for row in rows if row["event"] == "blocker" and row.get("scope") == "final_publishability"
+    ]
+    latest_blocker_status = {row["code"]: row["status"] for row in final_blocker_rows}
+    latest_snapshot = [row for row in rows if row["event"] == "blocker_snapshot" and row.get("scope") == "final_publishability"][-1]
+    assert latest_blocker_status["pending_lennox_8_of_10_review"] == "active"
+    assert latest_blocker_status["strong_studio_sound_not_proven"] == "resolved"
+    assert "strong_studio_sound_not_proven" not in latest_snapshot["blockers"]
+    assert latest_snapshot["blockers"] == ["pending_lennox_8_of_10_review"]
     assert [action["action"] for action in scorecard["proof_layers"]["final_publishability"]["unblock_actions"]] == ["record_lennox_quality_review"]
     latest_audio_gate = [row for row in rows if row["event"] == "gate" and row["name"] == "audio_quality"][-1]
     assert latest_audio_gate["status"] == "pass"
