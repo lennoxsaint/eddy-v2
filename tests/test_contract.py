@@ -9,11 +9,14 @@ from pathlib import Path
 import pytest
 
 from eddy_v2.cost import CostTracker
+from eddy_v2.commands import ffprobe_json
 from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import TOOLS
+from eddy_v2.models import EditIntent
 from eddy_v2.pipeline import edit_folder
 from eddy_v2.policy import CLOUD_SURFACES, RunPolicy
 from eddy_v2.receipts import Receipts
+from eddy_v2.render import render_shorts
 from eddy_v2.sources import discover_sources, lock_sources
 
 
@@ -133,6 +136,22 @@ def test_shortfall_is_complete_not_filler(tmp_path: Path, monkeypatch: pytest.Mo
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     assert result.status == "complete"
     assert any(row["event"] == "shorts_quality_shortfall" for row in rows)
+
+
+def test_screen_camera_shorts_are_true_vertical_9x16(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 16)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    intent = EditIntent(
+        target_duration_s=2,
+        identity="code-cinema",
+        shorts_target=1,
+        hook="Proof-gated video",
+        title="Geometry Test",
+    )
+    outputs = render_shorts(discover_sources(folder), tmp_path / "run", intent, Receipts(tmp_path / "receipts.jsonl"))
+    probe = ffprobe_json(outputs[0])
+    video = next(stream for stream in probe["streams"] if stream["codec_type"] == "video")
+    assert (video["width"], video["height"]) == (1080, 1920)
 
 
 def test_local_only_refuses_all_cloud_surfaces(tmp_path: Path):

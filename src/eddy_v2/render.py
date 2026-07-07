@@ -132,10 +132,10 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
         out = shorts_dir / f"short-{index + 1:02d}.mp4"
         if sources.screen:
             filter_complex = (
-                "[0:v]scale=1080:810:force_original_aspect_ratio=increase,crop=1080:810[cam];"
-                "[1:v]scale=1080:810:force_original_aspect_ratio=decrease,pad=1080:810:(ow-iw)/2:(oh-ih)/2:black[screen];"
+                "[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[cam];"
+                "[1:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:black[screen];"
                 "[cam][screen]vstack=inputs=2,"
-                f"drawtext=text='{intent.hook}':x=60:y=900:fontsize=52:fontcolor=white:"
+                f"drawtext=text='{intent.hook}':x=60:y=1030:fontsize=52:fontcolor=white:"
                 "box=1:boxcolor=0x07111fd9:boxborderw=20[v]"
             )
             args = [
