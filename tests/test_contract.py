@@ -464,6 +464,45 @@ def test_transcript_sidecar_drives_semantic_chapters_and_short_starts(tmp_path: 
     assert any(row["event"] == "cut_plan" and row["short_start_source"] == "transcript" for row in rows)
 
 
+def test_parent_markdown_transcript_is_used_for_raw_folder(tmp_path: Path):
+    folder = make_layered_fixture(tmp_path / "project" / "raw", 50)
+    transcript = folder.parent / "transcript.md"
+    transcript.write_text(
+        "\n".join(
+            [
+                "# Project transcript",
+                "",
+                "[00:00:02] Parent transcript hook explains why the duplicated app matters",
+                "",
+                "[00:00:20] Second transcript beat shows the proxy and model picker",
+                "",
+                "[00:00:38] Final transcript payoff gives the exact install path",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    receipts = Receipts(tmp_path / "receipts.jsonl")
+    intent = EditIntent(
+        target_duration_s=4,
+        identity="code-cinema",
+        shorts_target=3,
+        hook="Parent transcript hook",
+        title="Parent Transcript Test",
+    )
+
+    plan = create_edit_plan(discover_sources(folder), tmp_path / "run", intent, receipts)
+    rows = receipts.read_all()
+    cues = json.loads((tmp_path / "run" / "transcript-cues.json").read_text(encoding="utf-8"))
+
+    assert cues["source"] == str(transcript)
+    assert plan.transcript_cue_count == 3
+    assert [chapter["time"] for chapter in plan.semantic_chapters or []] == ["00:02", "00:20", "00:38"]
+    assert plan.short_starts_s == [1.0, 19.0, 35.0]
+    assert any(row["event"] == "transcript" and row["status"] == "pass" and row["source"] == str(transcript) for row in rows)
+    assert any(row["event"] == "cut_plan" and row["short_start_source"] == "transcript" for row in rows)
+
+
 def test_semantic_short_starts_allow_honest_shortfall():
     from eddy_v2.transcript import TranscriptCue
 

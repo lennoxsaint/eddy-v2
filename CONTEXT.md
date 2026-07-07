@@ -41,7 +41,7 @@ Secret-safe next actions inside the Proof Layers that name missing environment v
 _Avoid_: Secret capture, silent retry, hand-wavy next step
 
 **Transcript Sidecar**:
-A creator-provided `.vtt`, `.srt`, or `.txt` file placed beside the raw footage so Eddy can make semantic chapter and Shorts-anchor decisions without mutating source media.
+A creator-provided `.vtt`, `.srt`, `.md`, or `.txt` file placed beside the raw footage, one level above a `raw/` folder, or inside a known Descript export sibling so Eddy can make semantic chapter and Shorts-anchor decisions without mutating source media.
 _Avoid_: Hidden transcription job, source edit, unreceipted metadata
 
 **Semantic Chapter**:

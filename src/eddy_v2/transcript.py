@@ -12,9 +12,11 @@ from .sources import Sources
 TRANSCRIPT_NAMES = (
     "transcript.vtt",
     "transcript.srt",
+    "transcript.md",
     "transcript.txt",
     "captions.vtt",
     "captions.srt",
+    "captions.md",
 )
 
 
@@ -61,19 +63,58 @@ def _parse_timed_transcript(text: str) -> list[TranscriptCue]:
     return cues
 
 
+def _estimate_text_duration(text: str) -> float:
+    return max(4.0, min(12.0, len(text.split()) / 2.2))
+
+
+def _parse_bracketed_transcript(text: str) -> list[TranscriptCue]:
+    marker_pattern = re.compile(r"\[(?P<time>\d{1,2}:\d{2}(?::\d{2})?)\]")
+    markers = list(marker_pattern.finditer(text))
+    cues: list[TranscriptCue] = []
+    for index, marker in enumerate(markers):
+        start_s = _parse_timestamp(marker.group("time"))
+        next_marker = markers[index + 1] if index + 1 < len(markers) else None
+        body_end = next_marker.start() if next_marker else len(text)
+        body = text[marker.end() : body_end]
+        body = re.sub(r"^#+\s+.*$", "", body, flags=re.MULTILINE)
+        body = re.sub(r"\s+", " ", body).strip()
+        if not body:
+            continue
+        inferred_end = _parse_timestamp(next_marker.group("time")) if next_marker else start_s + _estimate_text_duration(body)
+        end_s = max(start_s + 0.75, inferred_end)
+        cues.append(TranscriptCue(start_s, end_s, body))
+    return cues
+
+
 def _parse_plain_transcript(text: str) -> list[TranscriptCue]:
     paragraphs = [line.strip() for line in re.split(r"\n\s*\n", text) if line.strip()]
     cues: list[TranscriptCue] = []
     cursor = 0.0
     for paragraph in paragraphs[:24]:
-        duration = max(4.0, min(12.0, len(paragraph.split()) / 2.2))
+        duration = _estimate_text_duration(paragraph)
         cues.append(TranscriptCue(cursor, cursor + duration, paragraph))
         cursor += duration
     return cues
 
 
+def _candidate_transcript_dirs(folder: Path) -> list[Path]:
+    dirs = [
+        folder,
+        folder.parent,
+        folder / "edit" / "descript-export",
+        folder.parent / "edit" / "descript-export",
+    ]
+    unique: list[Path] = []
+    for path in dirs:
+        if path not in unique and path.exists():
+            unique.append(path)
+    return unique
+
+
 def _find_transcript(sources: Sources) -> Path | None:
-    candidates = list(sources.folder.glob("*.vtt")) + list(sources.folder.glob("*.srt")) + list(sources.folder.glob("*.txt"))
+    candidates: list[Path] = []
+    for folder in _candidate_transcript_dirs(sources.folder):
+        candidates.extend(list(folder.glob("*.vtt")) + list(folder.glob("*.srt")) + list(folder.glob("*.md")) + list(folder.glob("*.txt")))
     by_name = {path.name.lower(): path for path in candidates}
     for name in TRANSCRIPT_NAMES:
         if name in by_name:
@@ -88,7 +129,10 @@ def load_transcript_cues(sources: Sources, run_dir: Path, receipts: Receipts) ->
         receipts.log("transcript", status="missing", code="transcript_source_missing", folder=str(sources.folder))
         return []
     text = transcript.read_text(encoding="utf-8", errors="replace")
-    cues = _parse_timed_transcript(text) if transcript.suffix.lower() in {".vtt", ".srt"} else _parse_plain_transcript(text)
+    if transcript.suffix.lower() in {".vtt", ".srt"}:
+        cues = _parse_timed_transcript(text)
+    else:
+        cues = _parse_bracketed_transcript(text) or _parse_plain_transcript(text)
     payload = {"source": str(transcript), "cues": [cue.as_dict() for cue in cues]}
     (run_dir / "transcript-cues.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     receipts.log("transcript", status="pass", source=str(transcript), cue_count=len(cues), output=str(run_dir / "transcript-cues.json"))
