@@ -24,12 +24,21 @@ _Avoid_: Draft final, partial export, usable preview
 The single real layered Codex custom-models footage set used to judge whether V2 beats the current Eddy path.
 _Avoid_: Cherry-picked demo, synthetic test, smoke clip
 
+**Transcript Sidecar**:
+A creator-provided `.vtt`, `.srt`, or `.txt` file placed beside the raw footage so Eddy can make semantic chapter and Shorts-anchor decisions without mutating source media.
+_Avoid_: Hidden transcription job, source edit, unreceipted metadata
+
+**Semantic Chapter**:
+A launch-kit chapter derived from transcript language and backed by a `transcript` receipt, with a fallback marker when no transcript sidecar exists.
+_Avoid_: Generic chapter, fake understanding, unproven editorial beat
+
 ## Relationships
 
 - A **Proof-Gated One-Command** run may use the **Cloud Quality Profile** unless `--local-only` is set.
 - An **Identity Pack** drives all default HyperFrames motion surfaces.
 - A **Quarantined Partial** may be cited in receipts, but it must not appear in `final/`.
 - The **Bakeoff Hero Video** is the acceptance target after the full V2 feature floor exists.
+- A **Transcript Sidecar** can produce **Semantic Chapter** entries, but the run remains complete without one only when the fallback is receipted.
 
 ## Example Dialogue
 

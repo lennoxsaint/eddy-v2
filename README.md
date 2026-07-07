@@ -45,6 +45,10 @@ eddy bakeoff /path/to/footage
 
 When `OPENROUTER_API_KEY` is configured, Eddy runs a bounded editor+critic loop before rendering: the editor proposes `intent.json`, the critic approves or returns a repair object, and the final intent is clamped back to frozen identities and source duration. The loop is fully receipted and cost-capped. Eddy does not run a model council on every edit; escalation belongs in the bakeoff workflow after repeated failures.
 
+## Transcript Sidecars
+
+If the footage folder contains `transcript.vtt`, `transcript.srt`, `transcript.txt`, `captions.vtt`, or `captions.srt`, Eddy parses it into `transcript-cues.json`, derives semantic launch-kit chapters, and prefers transcript-backed Shorts anchors. Source media still stays read-only. If no transcript sidecar exists, Eddy records `transcript_source_missing`, uses audio-density planning, and marks launch-kit chapters as fallback.
+
 ## Audio Quality
 
 When `DESCRIPT_API_KEY` is configured, Eddy tries Descript Studio Sound first using only the extracted audio WAV. It requests a direct upload URL, uploads audio bytes only, prompts Underlord for Studio Sound without timing/content edits, publishes an audio export, downloads it, and marks Strong Studio Sound only if duration parity passes. Tokens and signed URLs are never written to receipts.

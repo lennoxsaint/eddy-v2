@@ -12,7 +12,7 @@ from eddy_v2.commands import ffprobe_json
 from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import TOOLS
 from eddy_v2.models import EditIntent
-from eddy_v2.plan import create_edit_plan, select_short_starts
+from eddy_v2.plan import create_edit_plan, select_semantic_short_starts, select_short_starts
 from eddy_v2.pipeline import edit_folder
 from eddy_v2.policy import CLOUD_SURFACES, RunPolicy
 from eddy_v2.qa import validate_short_video
@@ -150,6 +150,29 @@ def make_silence_then_tone_fixture(folder: Path) -> Path:
     return folder
 
 
+def write_vtt_transcript(folder: Path) -> Path:
+    transcript = folder / "transcript.vtt"
+    transcript.write_text(
+        "\n".join(
+            [
+                "WEBVTT",
+                "",
+                "00:00:01.000 --> 00:00:05.000",
+                "First semantic hook explains why proof gated editing matters",
+                "",
+                "00:00:18.000 --> 00:00:23.000",
+                "Second semantic beat shows the motion identity system working",
+                "",
+                "00:00:35.000 --> 00:00:40.000",
+                "Final semantic payoff turns the long edit into Shorts",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return transcript
+
+
 def test_source_hashing_is_stable(tmp_path: Path):
     folder = make_layered_fixture(tmp_path / "footage", 2)
     receipts = Receipts(tmp_path / "receipts.jsonl")
@@ -178,8 +201,12 @@ def test_receipts_cover_core_events(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     result = edit_folder(folder, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    launch_kit = json.loads((result.run_dir / "final" / "launch-kit" / "launch-kit.json").read_text(encoding="utf-8"))
     events = {row["event"] for row in rows}
-    assert {"run_start", "source_hash", "ffmpeg", "hyperframes", "cut_plan", "gate", "run_finish"} <= events
+    assert {"run_start", "source_hash", "transcript", "semantic_plan", "ffmpeg", "hyperframes", "cut_plan", "gate", "run_finish"} <= events
+    assert any(row["event"] == "transcript" and row["status"] == "missing" and row["code"] == "transcript_source_missing" for row in rows)
+    assert any(row["event"] == "semantic_plan" and row["status"] == "fallback" for row in rows)
+    assert launch_kit["chapters"][0]["source"] == "fallback"
 
 
 def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -243,6 +270,39 @@ def test_edit_plan_skips_leading_silence(tmp_path: Path):
     assert plan.long_segment.start_s >= 1.5
     assert (tmp_path / "run" / "edit-plan.json").exists()
     assert any(row["event"] == "cut_plan" and row["status"] == "pass" for row in rows)
+
+
+def test_transcript_sidecar_drives_semantic_chapters_and_short_starts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 50)
+    write_vtt_transcript(folder)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=4)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    plan = json.loads((result.run_dir / "edit-plan.json").read_text(encoding="utf-8"))
+    launch_kit = json.loads((result.run_dir / "final" / "launch-kit" / "launch-kit.json").read_text(encoding="utf-8"))
+    transcript_cues = json.loads((result.run_dir / "transcript-cues.json").read_text(encoding="utf-8"))
+
+    assert result.status == "complete"
+    assert transcript_cues["source"].endswith("transcript.vtt")
+    assert plan["transcript_cue_count"] == 3
+    assert [chapter["source"] for chapter in launch_kit["chapters"]] == ["transcript", "transcript", "transcript"]
+    assert launch_kit["chapters"][0]["title"].startswith("First semantic hook")
+    assert plan["short_starts_s"] == [0.0, 17.0, 34.0]
+    assert len(list((result.run_dir / "final" / "shorts").glob("short-*.mp4"))) == 3
+    assert any(row["event"] == "transcript" and row["status"] == "pass" and row["cue_count"] == 3 for row in rows)
+    assert any(row["event"] == "semantic_plan" and row["status"] == "pass" and row["chapter_count"] == 3 for row in rows)
+    assert any(row["event"] == "cut_plan" and row["short_start_source"] == "transcript" for row in rows)
+
+
+def test_semantic_short_starts_allow_honest_shortfall():
+    from eddy_v2.transcript import TranscriptCue
+
+    starts = select_semantic_short_starts(
+        [TranscriptCue(start_s=5, end_s=11, text="Only one strong semantic moment exists")],
+        source_duration=40,
+        target_count=3,
+    )
+    assert starts == [4.0]
 
 
 def test_audio_extract_uses_planned_long_segment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

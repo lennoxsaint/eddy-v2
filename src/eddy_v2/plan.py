@@ -9,6 +9,7 @@ from .commands import duration_s, run_command
 from .models import EditIntent
 from .receipts import Receipts
 from .sources import Sources
+from .transcript import TranscriptCue, load_transcript_cues, semantic_chapters
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,8 @@ class EditPlan:
     long_segment: Segment
     short_starts_s: list[float]
     non_silent_intervals: list[tuple[float, float]]
+    transcript_cue_count: int = 0
+    semantic_chapters: list[dict] | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -34,6 +37,8 @@ class EditPlan:
             "long_segment": self.long_segment.as_dict(),
             "short_starts_s": [round(start, 3) for start in self.short_starts_s],
             "non_silent_intervals": [[round(start, 3), round(end, 3)] for start, end in self.non_silent_intervals],
+            "transcript_cue_count": self.transcript_cue_count,
+            "semantic_chapters": self.semantic_chapters or [],
         }
 
 
@@ -109,9 +114,43 @@ def select_short_starts(intervals: list[tuple[float, float]], source_duration: f
     return []
 
 
+def select_semantic_short_starts(
+    cues: list[TranscriptCue],
+    source_duration: float,
+    target_count: int,
+    *,
+    short_duration_s: float = 15.0,
+) -> list[float]:
+    if target_count <= 0 or source_duration < short_duration_s:
+        return []
+    max_start = source_duration - short_duration_s
+    scored: list[tuple[float, float]] = []
+    for cue in cues:
+        words = cue.text.split()
+        if len(words) < 4:
+            continue
+        start = max(0.0, min(max_start, cue.start_s - 1.0))
+        score = min(len(words), 24) + min(max(cue.end_s - cue.start_s, 0.0), short_duration_s)
+        scored.append((score, start))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    starts: list[float] = []
+    for _, start in scored:
+        if all(abs(start - existing) >= short_duration_s for existing in starts):
+            starts.append(start)
+        if len(starts) == target_count:
+            return [round(value, 3) for value in sorted(starts)]
+    return [round(value, 3) for value in sorted(starts)]
+
+
 def create_edit_plan(sources: Sources, run_dir: Path, intent: EditIntent, receipts: Receipts) -> EditPlan:
     run_dir.mkdir(parents=True, exist_ok=True)
     source_duration = duration_s(sources.camera)
+    transcript_cues = load_transcript_cues(sources, run_dir, receipts)
+    chapters = semantic_chapters(transcript_cues)
+    if chapters:
+        receipts.log("semantic_plan", status="pass", source="transcript", chapter_count=len(chapters))
+    else:
+        receipts.log("semantic_plan", status="fallback", reason="transcript_cues_unavailable")
     proc = run_command(
         [
             "ffmpeg",
@@ -133,12 +172,17 @@ def create_edit_plan(sources: Sources, run_dir: Path, intent: EditIntent, receip
     if not intervals:
         intervals = [(0.0, source_duration)]
     long_segment = select_long_segment(intervals, source_duration, intent.target_duration_s)
-    short_starts = select_short_starts(intervals, source_duration, intent.shorts_target)
+    short_starts = select_semantic_short_starts(transcript_cues, source_duration, intent.shorts_target)
+    short_start_source = "transcript" if short_starts else "audio_density"
+    if not short_starts:
+        short_starts = select_short_starts(intervals, source_duration, intent.shorts_target)
     plan = EditPlan(
         source_duration_s=source_duration,
         long_segment=long_segment,
         short_starts_s=short_starts,
         non_silent_intervals=intervals[:250],
+        transcript_cue_count=len(transcript_cues),
+        semantic_chapters=chapters,
     )
     (run_dir / "edit-plan.json").write_text(json.dumps(plan.as_dict(), indent=2), encoding="utf-8")
     receipts.log(
@@ -147,5 +191,8 @@ def create_edit_plan(sources: Sources, run_dir: Path, intent: EditIntent, receip
         long_segment=long_segment.as_dict(),
         short_starts_s=short_starts,
         non_silent_interval_count=len(intervals),
+        transcript_cue_count=len(transcript_cues),
+        semantic_chapter_count=len(chapters),
+        short_start_source=short_start_source,
     )
     return plan
