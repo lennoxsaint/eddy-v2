@@ -1156,6 +1156,7 @@ def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_pat
     packet = json.loads((result.run_dir / "final" / "review" / "review-packet.json").read_text(encoding="utf-8"))
 
     assert retry["status"] == "pass"
+    assert retry["audio_gate_status"] == "pass"
     assert retry["strong_studio_sound"] is True
     assert retry["provider_attempts"]["descript"]["status"] == "pass"
     assert sum(1 for row in rows if row["event"] == "audio_extract") == 1
@@ -1171,6 +1172,9 @@ def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_pat
     assert scorecard["proof_layers"]["final_publishability"]["status"] == "blocked"
     assert "pending_lennox_8_of_10_review" in scorecard["proof_layers"]["final_publishability"]["blockers"]
     assert [action["action"] for action in scorecard["proof_layers"]["final_publishability"]["unblock_actions"]] == ["record_lennox_quality_review"]
+    latest_audio_gate = [row for row in rows if row["event"] == "gate" and row["name"] == "audio_quality"][-1]
+    assert latest_audio_gate["status"] == "pass"
+    assert latest_audio_gate["quality_status"] == "strong_studio_sound"
     assert launch_kit["audio_proof"]["quality_status"] == "strong_studio_sound"
     assert packet["audio_proof"]["quality_status"] == "strong_studio_sound"
     assert "- audio_quality: strong_studio_sound" in (result.run_dir / "final" / "review" / "README.md").read_text(encoding="utf-8")
@@ -1189,6 +1193,7 @@ def test_audio_proof_retry_local_only_refuses_cloud_without_fake_upload(tmp_path
     audio_proof = json.loads((result.run_dir / "final" / "audio-proof.json").read_text(encoding="utf-8"))
 
     assert retry["status"] == "blocked"
+    assert retry["audio_gate_status"] == "failed"
     assert retry["quality_status"] == "local_degraded_fallback"
     scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert scorecard["status"] == "blocked"
@@ -1197,6 +1202,8 @@ def test_audio_proof_retry_local_only_refuses_cloud_without_fake_upload(tmp_path
     assert any(row["event"] == "cloud_refused" and row["surface"] == "descript" for row in rows)
     assert not any(row["event"] == "descript_import" for row in rows)
     assert not any(row["event"] == "audio_retry_remux" and row["status"] == "pass" for row in rows)
+    latest_audio_gate = [row for row in rows if row["event"] == "gate" and row["name"] == "audio_quality"][-1]
+    assert latest_audio_gate["status"] == "failed"
     assert "strong_studio_sound_not_proven" in audio_proof["quality_blockers"]
 
 

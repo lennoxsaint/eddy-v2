@@ -87,6 +87,19 @@ def _verify_source_manifest(run_dir: Path, receipts: Receipts) -> None:
             raise RuntimeError(f"source_hash_changed:{label}")
 
 
+def _log_audio_quality_gate(proof: dict[str, Any], receipts: Receipts) -> str:
+    blockers = audio_gate_blockers(proof)
+    status = "pass" if not blockers else "failed"
+    receipts.log(
+        "gate",
+        name="audio_quality",
+        status=status,
+        quality_status=proof.get("quality_status", "missing"),
+        blockers=blockers,
+    )
+    return status
+
+
 def _remux_final_video(run_dir: Path, audio: Path, receipts: Receipts) -> Path:
     final_video = run_dir / "final" / "video.mp4"
     if not final_video.exists():
@@ -159,6 +172,7 @@ def retry_audio_proof(run_dir: Path, *, local_only: bool = False, cloud_budget_u
 
     audio_proof_path = write_audio_proof(run_dir, receipts)
     proof = read_json_object(audio_proof_path) or {}
+    audio_gate_status = _log_audio_quality_gate(proof, receipts)
     cost_summary = CostTracker(receipts, cap_usd=cloud_budget_usd, spent_usd=_latest_cost_spent(receipts.read_all())).summary()
 
     _refresh_json_audio(run_dir / "scorecard.json", audio_proof_path, proof, cost_summary)
@@ -178,6 +192,7 @@ def retry_audio_proof(run_dir: Path, *, local_only: bool = False, cloud_budget_u
     result = {
         "run_dir": str(run_dir),
         "status": status,
+        "audio_gate_status": audio_gate_status,
         "audio_proof": str(audio_proof_path),
         "quality_status": proof.get("quality_status"),
         "strong_studio_sound": proof.get("strong_studio_sound"),
