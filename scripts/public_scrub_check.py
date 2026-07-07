@@ -23,6 +23,7 @@ TEXT_EXTENSIONS = {
     ".html",
     ".json",
     ".md",
+    ".mjs",
     ".py",
     ".toml",
     ".txt",

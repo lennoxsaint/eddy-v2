@@ -37,6 +37,9 @@ jobs:
       - name: Doctor
         run: python -m eddy_v2.cli doctor
 
+      - name: Renderer doctor
+        run: npm run renderer:doctor
+
       - name: Lint
         run: ruff check src tests
 

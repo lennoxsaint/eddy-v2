@@ -12,6 +12,8 @@ from .plan import EditPlan
 from .receipts import Receipts
 
 MotionBeat = dict[str, float | str]
+ROOT = Path(__file__).resolve().parents[2]
+NODE_RENDERER = ROOT / "renderer" / "hyperframes-runner.mjs"
 
 
 def _copy_identity_assets(identity_root: Path, project: Path) -> None:
@@ -639,7 +641,21 @@ def _count_report_issues(report: dict[str, object], key: str) -> int:
 def run_hyperframes(project: Path, receipts: Receipts, *, portrait: bool = False) -> Path:
     output = project / ("motion-card.mp4" if portrait else "overlay.mp4")
     duration = _motion_duration(project)
+    renderer = str(NODE_RENDERER)
     if os.environ.get("EDDY_V2_FAKE_HYPERFRAMES"):
+        (project / "motion-renderer.json").write_text(
+            json.dumps(
+                {
+                    "status": "fake",
+                    "adapter": renderer,
+                    "renderer": "hyperframes",
+                    "reason": "EDDY_V2_FAKE_HYPERFRAMES",
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        receipts.log("node_renderer", status="fake", adapter=renderer, project=str(project), renderer="hyperframes")
         width, height = (1080, 1920) if portrait else (1920, 1080)
         receipts.log("hyperframes", phase="fake_lint", project=str(project), status="pass")
         receipts.log("hyperframes", phase="fake_inspect", project=str(project), status="pass")
@@ -668,7 +684,15 @@ def run_hyperframes(project: Path, receipts: Receipts, *, portrait: bool = False
         )
         receipts.log("hyperframes", phase="fake_render", project=str(project), output=str(output), status="pass")
         return output
-    lint = run_command(["npx", "--yes", "hyperframes", "lint", str(project), "--json"], receipts, event="hyperframes", timeout_s=240, check=False)
+    if not NODE_RENDERER.exists():
+        receipts.log("node_renderer", status="failed", adapter=renderer, reason="renderer_adapter_missing")
+        raise RuntimeError("hyperframes_node_renderer_missing")
+    (project / "motion-renderer.json").write_text(
+        json.dumps({"status": "configured", "adapter": renderer, "renderer": "hyperframes"}, indent=2),
+        encoding="utf-8",
+    )
+    receipts.log("node_renderer", status="pass", adapter=renderer, project=str(project), renderer="hyperframes")
+    lint = run_command(["node", renderer, "lint", str(project), "--json"], receipts, event="hyperframes", timeout_s=240, check=False)
     lint_path = project / "motion-lint.json"
     lint_report = _write_hyperframes_report(lint_path, lint.stdout or lint.stderr)
     lint_warnings = _count_report_issues(lint_report, "warningCount")
@@ -686,7 +710,7 @@ def run_hyperframes(project: Path, receipts: Receipts, *, portrait: bool = False
     if lint_status != "pass":
         raise RuntimeError("hyperframes_lint_failed")
     inspect = run_command(
-        ["npx", "--yes", "hyperframes", "inspect", str(project), "--json", "--samples", "15"],
+        ["node", renderer, "inspect", str(project), "--json", "--samples", "15"],
         receipts,
         event="hyperframes",
         timeout_s=300,
@@ -713,7 +737,7 @@ def run_hyperframes(project: Path, receipts: Receipts, *, portrait: bool = False
     if inspect_status != "pass":
         raise RuntimeError("hyperframes_inspect_failed")
     render = run_command(
-        ["npx", "--yes", "hyperframes", "render", str(project), "--quality", "draft", "--output", str(output)],
+        ["node", renderer, "render", str(project), "--quality", "draft", "--output", str(output)],
         receipts,
         event="hyperframes",
         timeout_s=900,

@@ -28,6 +28,7 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -e ".[dev]"
 eddy doctor
+npm run renderer:doctor
 ```
 
 `eddy doctor` fails if any required runtime tool is missing: `ffmpeg`, `ffprobe`, `node`, or `npx`.
@@ -53,7 +54,7 @@ Read commands accept `--json` for explicit machine-readable output; `eddy scorec
 
 `--local-only` refuses OpenRouter, Descript, Auphonic, ElevenLabs, cloud render, and image/model uploads. Cloud quality mode is otherwise allowed by default when credentials are configured and cost-capped.
 
-Run `python scripts/contract_audit.py` before public handoff. It checks the repo-scope contract: MIT license, no runtime dependencies, permissive build/dev dependencies, required CLI and MCP surfaces, the six frozen identities, required docs/ADRs/skill files, and absence of social/video publishing integrations.
+Run `python scripts/contract_audit.py` before public handoff. It checks the repo-scope contract: MIT license, no runtime dependencies, permissive build/dev dependencies, required CLI and MCP surfaces, the Node/HyperFrames renderer boundary, the six frozen identities, required docs/ADRs/skill files, and absence of social/video publishing integrations.
 
 ## Model Autonomy
 
@@ -121,6 +122,6 @@ The six approved identities are frozen systems, not restyleable themes:
 - `kinetic-poster`
 - `editorial-data`
 
-HyperFrames is the default motion renderer. V2 generates run-local HyperFrames projects and receipts lint, inspect, and render attempts.
+HyperFrames is the default motion renderer. Python orchestrates the edit, then calls the repo-owned dependency-free Node adapter at `renderer/hyperframes-runner.mjs` for HyperFrames lint, inspect, and render phases. V2 generates run-local HyperFrames projects and receipts the Node adapter plus each HyperFrames attempt.
 Long-form overlays keep the first 60 seconds dense, then switch to sparse transcript- or cut-plan-aware beat cards for later sections. The motion plan records `dense_first_60_s`, `sparse_overlay_count`, and each sparse overlay in `motion-plan.json`.
-Every motion project also writes `storyboard.md`, `storyboard.html`, and `motion-collision-proof.json`; the motion artifact gate refuses missing storyboard or failed collision proof before compositing is considered safe.
+Every motion project also writes `storyboard.md`, `storyboard.html`, `motion-renderer.json`, and `motion-collision-proof.json`; the motion artifact gate refuses missing storyboard, missing renderer proof, or failed collision proof before compositing is considered safe.

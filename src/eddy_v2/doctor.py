@@ -7,6 +7,7 @@ from typing import Callable
 from . import __version__
 from .cloud_quality import cloud_audio_profile, cloud_model_profile
 from .identities import list_identities
+from .motion import NODE_RENDERER
 
 REQUIRED_RUNTIME_TOOLS = ("ffmpeg", "ffprobe", "node", "npx")
 
@@ -20,6 +21,11 @@ def doctor_payload(which: Callable[[str], str | None] = shutil.which, environ: M
         "required_runtime_tools": tools,
         "missing_required_runtime_tools": missing,
         "ok": not missing,
+        "node_renderer": {
+            "adapter": str(NODE_RENDERER),
+            "exists": NODE_RENDERER.exists(),
+            "script": "npm run renderer:doctor",
+        },
         "cloud_quality_profile": {"audio": cloud_audio_profile(environ), "models": cloud_model_profile(environ)},
         "identities": list_identities(),
     }

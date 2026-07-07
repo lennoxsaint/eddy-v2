@@ -352,6 +352,9 @@ def test_motion_project_has_dense_plan_and_visual_qa(tmp_path: Path, monkeypatch
     assert (project / "storyboard.md").exists()
     assert (project / "storyboard.html").exists()
     assert collision["status"] == "pass"
+    renderer = json.loads((project / "motion-renderer.json").read_text(encoding="utf-8"))
+    assert renderer["adapter"].endswith("renderer/hyperframes-runner.mjs")
+    assert any(row["event"] == "node_renderer" and row["status"] == "fake" for row in rows)
     assert visual["unique_frame_hashes"] >= 2
     assert any(row["event"] == "motion_storyboard" and row["status"] == "pass" for row in rows)
     assert any(row["event"] == "motion_collision_proof" and row["status"] == "pass" for row in rows)
@@ -1325,7 +1328,25 @@ def test_cli_doctor_runs():
         assert data["cloud_quality_profile"]["models"]["providers"]["openrouter"]["missing"] == ["OPENROUTER_API_KEY"]
         for tool in ("ffmpeg", "ffprobe", "node", "npx"):
             assert data["required_runtime_tools"][tool] is True
+        assert data["node_renderer"]["adapter"].endswith("renderer/hyperframes-runner.mjs")
+        assert data["node_renderer"]["exists"] is True
         assert "code-cinema" in data["identities"]
+
+
+def test_node_hyperframes_renderer_contract():
+    package = json.loads(Path("package.json").read_text(encoding="utf-8"))
+    script = Path("renderer/hyperframes-runner.mjs")
+    proc = subprocess.run(["npm", "run", "renderer:doctor"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    payload = json.loads(proc.stdout[proc.stdout.find("{") :])
+
+    assert package["license"] == "MIT"
+    assert package["dependencies"] == {}
+    assert package["devDependencies"] == {}
+    assert script.exists()
+    assert "npx\", [\"--yes\", \"hyperframes\"" in script.read_text(encoding="utf-8")
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    assert payload["ok"] is True
+    assert payload["adapter"] == "renderer/hyperframes-runner.mjs"
 
 
 def test_cloud_audio_profile_lists_exact_unblock_options_without_secret_values():

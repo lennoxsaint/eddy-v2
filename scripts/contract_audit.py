@@ -46,6 +46,8 @@ REQUIRED_MCP = {
 REQUIRED_DOCS = [
     ROOT / "README.md",
     ROOT / "CONTEXT.md",
+    ROOT / "package.json",
+    ROOT / "renderer" / "hyperframes-runner.mjs",
     ROOT / "docs" / "adr" / "0001-separate-public-v2-repo.md",
     ROOT / "docs" / "adr" / "0002-cloud-first-receipts.md",
     ROOT / "docs" / "adr" / "0003-hyperframes-identities.md",
@@ -88,6 +90,8 @@ FORBIDDEN_PUBLICATION_PATTERNS = {
     "social_platform_sdk": re.compile(r"\\btweepy\\b|\\binstagrapi\\b|\\blinkedin\\b|\\btiktok\\b", re.IGNORECASE),
 }
 
+REQUIRED_NPM_SCRIPTS = {"renderer:doctor"}
+
 
 def _project() -> dict[str, Any]:
     return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -126,7 +130,7 @@ def _scan_publication_integrations() -> list[str]:
         for path in root.rglob("*"):
             if path.resolve() == Path(__file__).resolve():
                 continue
-            if path.suffix not in {".py", ".json", ".toml"} or not path.is_file():
+            if path.suffix not in {".py", ".json", ".toml", ".mjs"} or not path.is_file():
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
             for label, pattern in FORBIDDEN_PUBLICATION_PATTERNS.items():
@@ -144,6 +148,9 @@ def main() -> int:
     mcp_tools = _mcp_tools()
     identity_slugs = _identity_slugs()
     package_data = set(project.get("tool", {}).get("setuptools", {}).get("package-data", {}).get("eddy_v2", []))
+    package_json = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    npm_scripts_raw = package_json.get("scripts")
+    npm_scripts = set(npm_scripts_raw) if isinstance(npm_scripts_raw, dict) else set()
     threadify_fc_assets = {
         path.name for path in (SRC / "eddy_v2" / "identities_data" / "threadify-fc" / "assets").glob("*.png")
     }
@@ -159,6 +166,13 @@ def main() -> int:
         "required_mcp_surface": REQUIRED_MCP <= mcp_tools,
         "frozen_identity_pack": identity_slugs == REQUIRED_IDENTITIES,
         "required_docs_present": all(path.exists() for path in REQUIRED_DOCS),
+        "node_hyperframes_renderer_boundary": (ROOT / "renderer" / "hyperframes-runner.mjs").exists()
+        and (ROOT / "package.json").exists()
+        and REQUIRED_NPM_SCRIPTS <= npm_scripts
+        and package_json.get("license") == "MIT"
+        and package_json.get("private") is True
+        and package_json.get("dependencies") == {}
+        and package_json.get("devDependencies") == {},
         "required_context_terms": all(term in context for term in REQUIRED_CONTEXT_TERMS),
         "identity_assets_packaged": REQUIRED_PACKAGE_DATA <= package_data,
         "required_threadify_fc_assets_present": threadify_fc_assets == REQUIRED_THREADIFY_FC_ASSETS,
@@ -176,6 +190,8 @@ def main() -> int:
             "mcp_tools": sorted(mcp_tools),
             "identities": sorted(identity_slugs),
             "package_data": sorted(package_data),
+            "npm_scripts": sorted(npm_scripts),
+            "node_renderer": "renderer/hyperframes-runner.mjs",
             "threadify_fc_assets": sorted(threadify_fc_assets),
             "forbidden_publication_findings": forbidden_publication,
         },

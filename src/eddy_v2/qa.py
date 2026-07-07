@@ -149,6 +149,7 @@ def validate_motion_artifact(project: Path, output: Path, receipts: Receipts, *,
         "index.html",
         "motion-plan.json",
         "motion-collision-proof.json",
+        "motion-renderer.json",
         "motion-lint.json",
         "motion-inspect.json",
     ]

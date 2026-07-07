@@ -1,0 +1,13 @@
+{
+  "name": "eddy-v2-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Dependency-free Node adapter for Eddy V2 HyperFrames rendering.",
+  "scripts": {
+    "renderer:doctor": "node renderer/hyperframes-runner.mjs doctor"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
