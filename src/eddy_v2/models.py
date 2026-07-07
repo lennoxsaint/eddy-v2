@@ -73,7 +73,15 @@ def _json_from_text(text: str) -> dict[str, Any]:
     return parsed
 
 
-def _intent_from_model_payload(parsed: dict[str, Any], sources: Sources, fallback: EditIntent, receipts: Receipts) -> EditIntent:
+def _intent_from_model_payload(
+    parsed: dict[str, Any],
+    sources: Sources,
+    fallback: EditIntent,
+    receipts: Receipts,
+    *,
+    min_target_duration_s: float | None = None,
+    min_shorts_target: int | None = None,
+) -> EditIntent:
     identity = str(parsed.get("identity") or fallback.identity).strip().lower()
     if identity not in SLUGS:
         receipts.log(
@@ -86,12 +94,33 @@ def _intent_from_model_payload(parsed: dict[str, Any], sources: Sources, fallbac
         identity = fallback.identity
     shorts_target = parsed.get("shorts_target", fallback.shorts_target)
     try:
+        if isinstance(shorts_target, bool):
+            raise TypeError("bool is not a valid shorts target")
         shorts_target_int = max(0, int(shorts_target))
     except (TypeError, ValueError):
         receipts.log("model_repair", field="shorts_target", rejected=str(shorts_target), selected=fallback.shorts_target)
         shorts_target_int = fallback.shorts_target
+    if min_shorts_target is not None and shorts_target_int < min_shorts_target:
+        receipts.log(
+            "model_repair",
+            field="shorts_target",
+            rejected=shorts_target_int,
+            selected=min_shorts_target,
+            reason="below_default_youtube_floor",
+        )
+        shorts_target_int = min_shorts_target
+    duration = _clamp_duration(sources, parsed.get("target_duration_s"), fallback.target_duration_s)
+    if min_target_duration_s is not None and duration < min_target_duration_s:
+        receipts.log(
+            "model_repair",
+            field="target_duration_s",
+            rejected=duration,
+            selected=min_target_duration_s,
+            reason="below_default_youtube_floor",
+        )
+        duration = min_target_duration_s
     return EditIntent(
-        target_duration_s=_clamp_duration(sources, parsed.get("target_duration_s"), fallback.target_duration_s),
+        target_duration_s=duration,
         identity=identity,
         shorts_target=shorts_target_int,
         hook=str(parsed.get("hook") or fallback.hook),
@@ -150,16 +179,33 @@ def _apply_critic(
     sources: Sources,
     fallback: EditIntent,
     receipts: Receipts,
+    *,
+    min_target_duration_s: float | None = None,
+    min_shorts_target: int | None = None,
 ) -> EditIntent:
     approved = bool(critic_payload.get("approved"))
     issues = critic_payload.get("issues") if isinstance(critic_payload.get("issues"), list) else []
     receipts.log("model_critic", provider="openrouter", status="approved" if approved else "repaired", issues=issues)
     if approved:
-        return _intent_from_model_payload(editor_payload, sources, fallback, receipts)
+        return _intent_from_model_payload(
+            editor_payload,
+            sources,
+            fallback,
+            receipts,
+            min_target_duration_s=min_target_duration_s,
+            min_shorts_target=min_shorts_target,
+        )
     repair = _dict_payload(critic_payload.get("repair"))
     if repair:
         receipts.log("model_repair", field="intent", selected="critic_repair", reason="critic_not_approved")
-        return _intent_from_model_payload(repair, sources, fallback, receipts)
+        return _intent_from_model_payload(
+            repair,
+            sources,
+            fallback,
+            receipts,
+            min_target_duration_s=min_target_duration_s,
+            min_shorts_target=min_shorts_target,
+        )
     receipts.log("model_repair", field="intent", selected="fallback", reason="critic_not_approved_without_repair")
     return fallback
 
@@ -174,9 +220,12 @@ def create_intent(
     target_duration_s: float | None = None,
 ) -> EditIntent:
     fallback = default_intent(sources, target_duration_s=target_duration_s)
+    default_youtube_floor = target_duration_s is None
     prompt = {
         "sources": sources.as_dict(),
         "target_duration_s": target_duration_s,
+        "default_target_duration_s": fallback.target_duration_s,
+        "default_shorts_target": fallback.shorts_target,
         "task": "Choose duration, identity, hook, title, and shorts target for a proof-gated YouTube edit.",
     }
     api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -205,6 +254,8 @@ def create_intent(
                     "content": (
                         "You are Eddy V2's editor. Return only compact JSON with target_duration_s, identity, "
                         "shorts_target, hook, title. Prefer specific titles/hooks grounded in source metadata. "
+                        "For the default autonomous YouTube edit, preserve the provided default duration floor "
+                        "and produce at least the default Shorts target unless source duration makes that impossible. "
                         f"Identity must be one of: {', '.join(SLUGS)}."
                     ),
                 },
@@ -226,7 +277,15 @@ def create_intent(
             editor_response_id=editor_response_id,
             critic_response_id=critic_response_id,
         )
-        intent = _apply_critic(editor_payload, critic_payload, sources, fallback, receipts)
+        intent = _apply_critic(
+            editor_payload,
+            critic_payload,
+            sources,
+            fallback,
+            receipts,
+            min_target_duration_s=fallback.target_duration_s if default_youtube_floor else None,
+            min_shorts_target=fallback.shorts_target if default_youtube_floor else None,
+        )
     except Exception as exc:
         receipts.log("model_loop", provider="openrouter", status="failed", error=str(exc))
         intent = fallback

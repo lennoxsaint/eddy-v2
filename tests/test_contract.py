@@ -13,7 +13,7 @@ from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json
 from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import TOOLS, handle
-from eddy_v2.models import EditIntent
+from eddy_v2.models import EditIntent, create_intent
 from eddy_v2.motion import create_motion_project, run_hyperframes
 from eddy_v2.plan import EditPlan, Segment, create_edit_plan, select_semantic_short_starts, select_short_starts
 from eddy_v2.pipeline import edit_folder
@@ -537,6 +537,59 @@ def test_openrouter_critic_can_repair_invalid_editor_intent(tmp_path: Path, monk
     assert intent["hook"] == "Custom model work needs proof, not vibes"
     assert any(row["event"] == "model_critic" and row["status"] == "repaired" for row in rows)
     assert any(row["event"] == "model_repair" and row["field"] == "intent" and row["selected"] == "critic_repair" for row in rows)
+
+
+def test_openrouter_default_autonomy_preserves_youtube_floor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 70)
+    run_dir = tmp_path / "run"
+    receipts = Receipts(run_dir / "receipts.jsonl")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "EDDY_V2_FAKE_OPENROUTER_EDITOR_JSON",
+        json.dumps(
+            {
+                "target_duration_s": 75,
+                "identity": "code-cinema",
+                "shorts_target": True,
+                "hook": "Codex now runs custom models",
+                "title": "Codex Custom Models",
+            }
+        ),
+    )
+    monkeypatch.setenv(
+        "EDDY_V2_FAKE_OPENROUTER_CRITIC_JSON",
+        json.dumps(
+            {
+                "approved": False,
+                "issues": ["model confused Shorts with the long edit"],
+                "repair": {
+                    "target_duration_s": 58,
+                    "identity": "code-cinema",
+                    "shorts_target": 1,
+                    "hook": "Codex now runs custom models",
+                    "title": "Codex Custom Models",
+                },
+            }
+        ),
+    )
+
+    intent = create_intent(discover_sources(folder), run_dir, receipts, RunPolicy(), CostTracker(receipts, cap_usd=25.0))
+    rows = receipts.read_all()
+
+    assert intent.target_duration_s == pytest.approx(70.0)
+    assert intent.shorts_target == 3
+    assert any(
+        row["event"] == "model_repair"
+        and row["field"] == "target_duration_s"
+        and row["reason"] == "below_default_youtube_floor"
+        for row in rows
+    )
+    assert any(
+        row["event"] == "model_repair"
+        and row["field"] == "shorts_target"
+        and row["reason"] == "below_default_youtube_floor"
+        for row in rows
+    )
 
 
 def test_mcp_schemas_match_cli_surface():
