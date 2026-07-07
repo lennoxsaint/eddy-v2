@@ -12,6 +12,7 @@ from eddy_v2.audio_retry import retry_audio_proof
 from eddy_v2.bakeoff import build_bakeoff_report
 from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json
+from eddy_v2.doctor import doctor_payload
 from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import TOOLS, handle
 from eddy_v2.models import EditIntent, create_intent
@@ -775,6 +776,8 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
 
     assert started["status"] == "blocked"
     assert "cloud_audio_credentials_missing_or_failed" in started["blockers"]
+    assert doctor["ok"] is True
+    assert doctor["missing_required_runtime_tools"] == []
     assert "code-cinema" in doctor["identities"]
     assert status["status"] == "blocked"
     assert "final/video.mp4" in artifacts["files"]
@@ -1038,7 +1041,25 @@ def test_cli_doctor_runs():
     proc = subprocess.run([sys.executable, "-m", "eddy_v2.cli", "doctor"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert proc.returncode == 0
     data = json.loads(proc.stdout)
+    assert data["ok"] is True
+    assert data["missing_required_runtime_tools"] == []
+    for tool in ("ffmpeg", "ffprobe", "node", "npx"):
+        assert data["required_runtime_tools"][tool] is True
     assert "code-cinema" in data["identities"]
+
+
+def test_doctor_fails_when_motion_runtime_is_missing():
+    def fake_which(name: str) -> str | None:
+        if name in {"node", "npx"}:
+            return None
+        return f"/usr/bin/{name}"
+
+    data = doctor_payload(fake_which)
+
+    assert data["ok"] is False
+    assert data["node"] is False
+    assert data["npx"] is False
+    assert data["missing_required_runtime_tools"] == ["node", "npx"]
 
 
 def test_public_scrub_check_runs():

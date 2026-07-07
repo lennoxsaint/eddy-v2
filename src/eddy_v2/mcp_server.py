@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
-from . import __version__
 from .audio_retry import retry_audio_proof
 from .bakeoff import build_bakeoff_report
-from .identities import list_identities
+from .doctor import doctor_payload
 from .pipeline import edit_folder
 from .quality_review import apply_quality_review
 from .receipts import Receipts
@@ -122,14 +120,7 @@ def _text_content(text: str) -> dict[str, Any]:
 
 
 def _doctor_payload() -> dict[str, Any]:
-    return {
-        "eddy_v2": __version__,
-        "ffmpeg": bool(shutil.which("ffmpeg")),
-        "ffprobe": bool(shutil.which("ffprobe")),
-        "node": bool(shutil.which("node")),
-        "npx": bool(shutil.which("npx")),
-        "identities": list_identities(),
-    }
+    return doctor_payload()
 
 
 def _status_payload(run_dir: Path) -> dict[str, Any]:

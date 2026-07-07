@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
-from . import __version__
 from .audio_retry import retry_audio_proof
 from .bakeoff import build_bakeoff_report
-from .identities import list_identities
+from .doctor import doctor_payload
 from .pipeline import edit_folder
 from .quality_review import apply_quality_review
 from .receipts import Receipts
@@ -26,16 +24,9 @@ def load_intent_payload(path: str | None) -> dict[str, Any] | None:
 
 
 def doctor(_args: argparse.Namespace) -> int:
-    checks = {
-        "eddy_v2": __version__,
-        "ffmpeg": bool(shutil.which("ffmpeg")),
-        "ffprobe": bool(shutil.which("ffprobe")),
-        "node": bool(shutil.which("node")),
-        "npx": bool(shutil.which("npx")),
-        "identities": list_identities(),
-    }
+    checks = doctor_payload()
     print(json.dumps(checks, indent=2))
-    return 0 if checks["ffmpeg"] and checks["ffprobe"] else 1
+    return 0 if checks["ok"] else 1
 
 
 def edit(args: argparse.Namespace) -> int:

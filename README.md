@@ -30,6 +30,8 @@ pip install -e ".[dev]"
 eddy doctor
 ```
 
+`eddy doctor` fails if any required runtime tool is missing: `ffmpeg`, `ffprobe`, `node`, or `npx`.
+
 ## CLI
 
 ```bash
