@@ -805,6 +805,24 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
     status = mcp_json(handle("tools/call", {"name": "eddy_v2_status", "arguments": {"run_dir": str(run_dir)}}))
     artifacts = mcp_json(handle("tools/call", {"name": "eddy_v2_artifacts", "arguments": {"run_dir": str(run_dir)}}))
     scorecard = handle("tools/call", {"name": "eddy_v2_scorecard", "arguments": {"run_dir": str(run_dir)}})["content"][0]["text"]
+    cli_status = subprocess.run(
+        [sys.executable, "-m", "eddy_v2.cli", "status", str(run_dir), "--json"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    cli_artifacts = subprocess.run(
+        [sys.executable, "-m", "eddy_v2.cli", "artifacts", str(run_dir), "--json"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    cli_scorecard = subprocess.run(
+        [sys.executable, "-m", "eddy_v2.cli", "scorecard", str(run_dir), "--json"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
     assert started["status"] == "blocked"
     assert "cloud_audio_credentials_missing_or_failed" in started["blockers"]
@@ -815,6 +833,12 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
     assert "final/video.mp4" in artifacts["files"]
     assert "scorecard.json" in artifacts["files"]
     assert "# Eddy V2 Scorecard" in scorecard
+    assert cli_status.returncode == 0, cli_status.stderr
+    assert cli_artifacts.returncode == 0, cli_artifacts.stderr
+    assert cli_scorecard.returncode == 0, cli_scorecard.stderr
+    assert json.loads(cli_status.stdout)["status"] == status["status"]
+    assert json.loads(cli_artifacts.stdout)["files"] == artifacts["files"]
+    assert json.loads(cli_scorecard.stdout)["status"] == "blocked"
 
 
 def test_review_command_records_scores_but_keeps_audio_blocker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -1093,16 +1117,17 @@ def test_local_only_refuses_configured_cloud_audio_without_upload(tmp_path: Path
 
 
 def test_cli_doctor_runs():
-    proc = subprocess.run([sys.executable, "-m", "eddy_v2.cli", "doctor"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    assert proc.returncode == 0
-    data = json.loads(proc.stdout)
-    assert data["ok"] is True
-    assert data["missing_required_runtime_tools"] == []
-    assert data["cloud_quality_profile"]["audio"]["audio_ready"] is False
-    assert data["cloud_quality_profile"]["audio"]["providers"]["descript"]["missing"] == ["DESCRIPT_API_KEY"]
-    for tool in ("ffmpeg", "ffprobe", "node", "npx"):
-        assert data["required_runtime_tools"][tool] is True
-    assert "code-cinema" in data["identities"]
+    for args in (["doctor"], ["doctor", "--json"]):
+        proc = subprocess.run([sys.executable, "-m", "eddy_v2.cli", *args], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        assert proc.returncode == 0
+        data = json.loads(proc.stdout)
+        assert data["ok"] is True
+        assert data["missing_required_runtime_tools"] == []
+        assert data["cloud_quality_profile"]["audio"]["audio_ready"] is False
+        assert data["cloud_quality_profile"]["audio"]["providers"]["descript"]["missing"] == ["DESCRIPT_API_KEY"]
+        for tool in ("ffmpeg", "ffprobe", "node", "npx"):
+            assert data["required_runtime_tools"][tool] is True
+        assert "code-cinema" in data["identities"]
 
 
 def test_cloud_audio_profile_lists_exact_unblock_options_without_secret_values():

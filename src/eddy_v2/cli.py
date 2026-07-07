@@ -60,7 +60,8 @@ def artifacts(args: argparse.Namespace) -> int:
 
 
 def scorecard(args: argparse.Namespace) -> int:
-    path = Path(args.run_dir) / "scorecard.md"
+    suffix = "json" if args.json else "md"
+    path = Path(args.run_dir) / f"scorecard.{suffix}"
     if not path.exists():
         print(f"scorecard not found: {path}", file=sys.stderr)
         return 1
@@ -127,7 +128,9 @@ def audio_proof(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="eddy", description="Eddy V2 proof-gated editor")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("doctor").set_defaults(func=doctor)
+    doctor_parser = sub.add_parser("doctor")
+    doctor_parser.add_argument("--json", action="store_true", help="Print machine-readable JSON output.")
+    doctor_parser.set_defaults(func=doctor)
     for name, func in (("edit", edit), ("bakeoff", bakeoff)):
         p = sub.add_parser(name)
         p.add_argument("folder")
@@ -141,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, func in (("status", status), ("artifacts", artifacts), ("scorecard", scorecard)):
         p = sub.add_parser(name)
         p.add_argument("run_dir")
+        p.add_argument("--json", action="store_true", help="Print machine-readable JSON output.")
         p.set_defaults(func=func)
     p = sub.add_parser("review")
     p.add_argument("run_dir")

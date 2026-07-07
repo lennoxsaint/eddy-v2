@@ -48,6 +48,8 @@ eddy bakeoff /path/to/footage
 eddy bakeoff /path/to/footage --current-run /Users/lennoxsaint/eddy/runs/<run>
 ```
 
+Read commands accept `--json` for explicit machine-readable output; `eddy scorecard <run> --json` returns `scorecard.json` instead of the default Markdown scorecard.
+
 `--local-only` refuses OpenRouter, Descript, Auphonic, ElevenLabs, cloud render, and image/model uploads. Cloud quality mode is otherwise allowed by default when credentials are configured and cost-capped.
 
 Run `python scripts/contract_audit.py` before public handoff. It checks the repo-scope contract: MIT license, no runtime dependencies, permissive build/dev dependencies, required CLI and MCP surfaces, the six frozen identities, required docs/ADRs/skill files, and absence of social/video publishing integrations.
