@@ -95,6 +95,9 @@ Every run that reaches audio writes `final/audio-proof.json`. It records the sel
 
 `final/audio-proof.json` also includes the same secret-safe Cloud Quality Profile from `eddy doctor`
 so a blocked run explains the exact credential options without exposing token values.
+`eddy doctor` also reports a secret-safe `credential_helpers.onepassword_cli` status using a bounded
+`op whoami` check, so operators can tell whether 1Password CLI is installed and signed in before
+trying a Studio Sound retry.
 
 Use `eddy audio-proof <run>` when a run already exists but Studio Sound credentials become available later. It reuses `audio/source-audio.wav`, verifies source hashes from `manifest.json`, retries Descript/Auphonic/ElevenLabs under the same cost cap, remuxes `final/video.mp4` when cloud audio passes, backs up the previous long video in `quarantine/`, and refreshes `final/audio-proof.json`, the scorecard, launch kit, and review packet. `eddy audio-proof --local-only <run>` refuses cloud audio before upload/fake-provider branches and leaves the existing proof blockers in place.
 
@@ -119,6 +122,10 @@ Every new run also writes secret-safe `eddy_provenance` into `receipts.jsonl`, `
 `scorecard.json`, and the launch kit. It records the Eddy package version, git commit/branch when the
 repo is available, dirty-worktree state, run settings, and the Node/HyperFrames renderer boundary.
 That keeps bakeoffs honest about which Eddy commit produced a hero artifact.
+
+`manifest.json` persists both `source_sha256_before` and `source_sha256_after`, plus
+`source_hash_intact`. The receipt stream still carries every individual `source_hash` row, but the
+manifest gives operators a one-file source-safety receipt.
 
 ## Scope Boundaries
 

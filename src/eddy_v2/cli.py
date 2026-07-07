@@ -25,7 +25,7 @@ def load_intent_payload(path: str | None) -> dict[str, Any] | None:
 
 
 def doctor(_args: argparse.Namespace) -> int:
-    checks = doctor_payload()
+    checks = doctor_payload(check_onepassword=True)
     print(json.dumps(checks, indent=2))
     return 0 if checks["ok"] else 1
 

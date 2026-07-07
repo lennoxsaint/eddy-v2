@@ -179,6 +179,40 @@ def _run_provenance_surface_present() -> bool:
     return all(path.exists() for path in expected) and all(term in text for term in required_terms)
 
 
+def _manifest_after_hash_surface_present() -> bool:
+    expected = [
+        ROOT / "src" / "eddy_v2" / "sources.py",
+        ROOT / "src" / "eddy_v2" / "pipeline.py",
+        ROOT / "tests" / "test_contract.py",
+        ROOT / "README.md",
+    ]
+    required_terms = [
+        "source_sha256_before",
+        "source_sha256_after",
+        "source_hash_intact",
+        "update_manifest_after_hashes",
+    ]
+    text = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in expected if path.exists())
+    return all(path.exists() for path in expected) and all(term in text for term in required_terms)
+
+
+def _credential_helper_surface_present() -> bool:
+    expected = [
+        ROOT / "src" / "eddy_v2" / "doctor.py",
+        ROOT / "src" / "eddy_v2" / "cli.py",
+        ROOT / "tests" / "test_contract.py",
+        ROOT / "README.md",
+    ]
+    required_terms = [
+        "credential_helpers",
+        "onepassword_cli",
+        "op whoami",
+        "check_onepassword=True",
+    ]
+    text = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in expected if path.exists())
+    return all(path.exists() for path in expected) and all(term in text for term in required_terms)
+
+
 def main() -> int:
     project = _project()
     runtime_deps = [_name(dep) for dep in project.get("project", {}).get("dependencies", [])]
@@ -216,6 +250,8 @@ def main() -> int:
         and package_json.get("devDependencies") == {},
         "required_context_terms": all(term in context for term in REQUIRED_CONTEXT_TERMS),
         "run_provenance_surface": _run_provenance_surface_present(),
+        "manifest_after_hash_surface": _manifest_after_hash_surface_present(),
+        "credential_helper_surface": _credential_helper_surface_present(),
         "identity_assets_packaged": REQUIRED_PACKAGE_DATA <= package_data,
         "required_threadify_fc_assets_present": threadify_fc_assets == REQUIRED_THREADIFY_FC_ASSETS,
         "no_hosted_app_dependencies": not any(dep in runtime_deps or dep in dev_deps for dep in {"flask", "fastapi", "django", "streamlit", "uvicorn"}),

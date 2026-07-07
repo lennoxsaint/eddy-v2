@@ -17,7 +17,7 @@ from .qa import validate_cut_integrity, validate_launch_package
 from .receipts import Receipts
 from .render import render_long, render_shorts
 from .review import build_review_packet
-from .sources import discover_sources, lock_sources, write_manifest
+from .sources import discover_sources, lock_sources, update_manifest_after_hashes, write_manifest
 
 
 @dataclass(frozen=True)
@@ -123,6 +123,7 @@ def edit_folder(
         write_scorecard(run_dir, cost.summary(), long_video=None, shorts=[], blockers=blockers, plan=None, eddy_provenance=eddy_provenance)
     finally:
         after = lock_sources(sources, receipts, phase="after")
+        update_manifest_after_hashes(run_dir, after)
         if before != after:
             blockers.append("source_hash_changed")
             receipts.log("blocker", code="source_hash_changed", before=before, after=after)

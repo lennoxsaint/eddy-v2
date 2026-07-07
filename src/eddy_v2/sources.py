@@ -74,3 +74,17 @@ def write_manifest(run_dir: Path, sources: Sources, before_hashes: dict[str, str
     if eddy_provenance is not None:
         manifest["eddy_provenance"] = eddy_provenance
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def update_manifest_after_hashes(run_dir: Path, after_hashes: dict[str, str]) -> None:
+    path = run_dir / "manifest.json"
+    manifest: dict[str, Any] = {}
+    if path.exists():
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(parsed, dict):
+            manifest = parsed
+    before = manifest.get("source_sha256_before")
+    before_hashes = before if isinstance(before, dict) else {}
+    manifest["source_sha256_after"] = after_hashes
+    manifest["source_hash_intact"] = before_hashes == after_hashes if before_hashes else None
+    path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")

@@ -13,7 +13,7 @@ from eddy_v2.bakeoff import build_bakeoff_report
 from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json
 from eddy_v2.cloud_quality import cloud_audio_profile, cloud_model_profile
-from eddy_v2.doctor import doctor_payload
+from eddy_v2.doctor import doctor_payload, onepassword_cli_status
 from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import SERVER_INFO, TOOLS, handle
 from eddy_v2.models import EditIntent, create_intent
@@ -232,6 +232,8 @@ def test_receipts_cover_core_events(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert provenance["run_settings"]["target_duration_s"] == 2
     assert provenance["renderer_boundary"]["node_adapter"] == "renderer/hyperframes-runner.mjs"
     assert manifest["eddy_provenance"]["git"]["commit"] == provenance["git"]["commit"]
+    assert manifest["source_sha256_before"] == manifest["source_sha256_after"]
+    assert manifest["source_hash_intact"] is True
     assert launch_kit["eddy_provenance"]["git"]["commit"] == provenance["git"]["commit"]
     assert scorecard["eddy_provenance"]["git"]["commit"] == provenance["git"]["commit"]
     assert scorecard["proof_layers"]["run_provenance_proof"]["status"] == "pass"
@@ -1394,6 +1396,8 @@ def test_cli_doctor_runs():
         assert data["cloud_quality_profile"]["audio"]["providers"]["descript"]["missing"] == ["DESCRIPT_API_KEY"]
         assert data["cloud_quality_profile"]["models"]["model_ready"] is False
         assert data["cloud_quality_profile"]["models"]["providers"]["openrouter"]["missing"] == ["OPENROUTER_API_KEY"]
+        assert data["credential_helpers"]["onepassword_cli"]["status"] in {"missing", "not_signed_in", "signed_in", "timeout", "unavailable"}
+        assert data["credential_helpers"]["onepassword_cli"]["check"] == "op whoami"
         for tool in ("ffmpeg", "ffprobe", "node", "npx"):
             assert data["required_runtime_tools"][tool] is True
         assert data["node_renderer"]["adapter"].endswith("renderer/hyperframes-runner.mjs")
@@ -1460,6 +1464,16 @@ def test_doctor_reports_configured_cloud_quality_without_exposing_secret_values(
     assert models["providers"]["openrouter"]["critic_model"] == "test/critic"
     assert "not-for-output" not in json.dumps(data)
     assert "also-not-for-output" not in json.dumps(data)
+
+
+def test_onepassword_cli_status_is_secret_safe_and_bounded():
+    missing = onepassword_cli_status(lambda _name: None)
+    signed_out = onepassword_cli_status(lambda _name: "/usr/bin/op", op_whoami=lambda: (1, "", "account is not signed in"))
+    signed_in = onepassword_cli_status(lambda _name: "/usr/bin/op", op_whoami=lambda: (0, "example user", ""))
+
+    assert missing == {"installed": False, "signed_in": False, "status": "missing", "check": "op whoami"}
+    assert signed_out == {"installed": True, "signed_in": False, "status": "not_signed_in", "check": "op whoami"}
+    assert signed_in == {"installed": True, "signed_in": True, "status": "signed_in", "check": "op whoami"}
 
 
 def test_doctor_fails_when_motion_runtime_is_missing():
