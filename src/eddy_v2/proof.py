@@ -100,5 +100,6 @@ def write_audio_proof(run_dir: Path, receipts: Receipts) -> Path:
         quality_status=proof["quality_status"],
         strong_studio_sound=proof["strong_studio_sound"],
         quality_blockers=proof["quality_blockers"],
+        cloud_quality_profile=proof["cloud_quality_profile"],
     )
     return path

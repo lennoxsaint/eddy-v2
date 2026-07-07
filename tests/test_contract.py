@@ -904,6 +904,8 @@ def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest
     assert audio_proof["cloud_quality_profile"]["audio"]["strong_studio_sound_ready"] is True
     assert audio_proof["quality_blockers"] == []
     assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
+    audio_proof_receipt = [row for row in rows if row["event"] == "audio_proof"][-1]
+    assert audio_proof_receipt["cloud_quality_profile"]["audio"]["strong_studio_sound_ready"] is True
 
 
 def test_audio_gate_blocks_only_missing_or_local_degraded_audio():
@@ -1038,6 +1040,8 @@ def test_local_only_refuses_configured_cloud_audio_without_upload(tmp_path: Path
     assert audio_proof["strong_studio_sound"] is False
     assert "strong_studio_sound_not_proven" in audio_proof["quality_blockers"]
     assert "cloud_audio_credentials_missing_or_failed" in audio_proof["quality_blockers"]
+    audio_proof_receipt = [row for row in rows if row["event"] == "audio_proof"][-1]
+    assert audio_proof_receipt["cloud_quality_profile"]["audio"]["audio_ready"] is True
 
 
 def test_cli_doctor_runs():
