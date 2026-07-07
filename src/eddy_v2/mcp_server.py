@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .audio_retry import retry_audio_proof
-from .bakeoff import build_bakeoff_report
+from .bakeoff import build_bakeoff_report, resolve_existing_v2_run
 from .doctor import doctor_payload
 from .pipeline import edit_folder
 from .quality_review import apply_quality_review
@@ -76,6 +76,7 @@ TOOLS = [
                 "cloud_budget": {"type": "number"},
                 "target_duration": {"type": "number"},
                 "current_run": {"type": "string"},
+                "v2_run": {"type": "string"},
                 "intent": {"type": "object"},
                 "intent_json": {"type": "string"},
             },
@@ -175,23 +176,30 @@ def _edit_payload(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _bakeoff_payload(args: dict[str, Any]) -> dict[str, Any]:
-    result = edit_folder(
-        Path(args["folder"]),
-        local_only=bool(args.get("local_only", False)),
-        cloud_budget_usd=float(args.get("cloud_budget", 25.0)),
-        target_duration_s=args.get("target_duration"),
-        host_intent_payload=_host_intent_payload(args),
-    )
+    folder = Path(args["folder"])
+    if args.get("v2_run"):
+        run_dir = resolve_existing_v2_run(folder, Path(str(args["v2_run"])))
+        run_payload = build_run_output_payload(run_dir)
+    else:
+        result = edit_folder(
+            folder,
+            local_only=bool(args.get("local_only", False)),
+            cloud_budget_usd=float(args.get("cloud_budget", 25.0)),
+            target_duration_s=args.get("target_duration"),
+            host_intent_payload=_host_intent_payload(args),
+        )
+        run_dir = result.run_dir
+        run_payload = build_run_output_payload(result.run_dir, status=result.status, blockers=result.blockers)
     report = build_bakeoff_report(
-        folder=Path(args["folder"]),
-        v2_run_dir=result.run_dir,
+        folder=folder,
+        v2_run_dir=run_dir,
         current_run_dir=Path(args["current_run"]) if args.get("current_run") else None,
-        receipts=Receipts(result.run_dir / "receipts.jsonl"),
+        receipts=Receipts(run_dir / "receipts.jsonl"),
     )
     return {
-        **build_run_output_payload(result.run_dir, status=result.status, blockers=result.blockers),
-        "bakeoff": str(result.run_dir / "bakeoff.md"),
-        "bakeoff_json": str(result.run_dir / "bakeoff.json"),
+        **run_payload,
+        "bakeoff": str(run_dir / "bakeoff.md"),
+        "bakeoff_json": str(run_dir / "bakeoff.json"),
         "current_output_proof": report["current_output_proof"],
         "winner": report["winner"],
         "remaining_blockers": report["completion_audit"]["remaining_blockers"],

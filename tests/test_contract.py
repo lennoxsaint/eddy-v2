@@ -9,7 +9,7 @@ import pytest
 
 import eddy_v2.bakeoff as bakeoff_module
 from eddy_v2.audio_retry import retry_audio_proof
-from eddy_v2.bakeoff import build_bakeoff_report
+from eddy_v2.bakeoff import build_bakeoff_report, resolve_existing_v2_run
 from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json, run_command
 from eddy_v2.cloud_quality import cloud_audio_profile, cloud_model_profile
@@ -1048,6 +1048,8 @@ def test_mcp_schemas_match_cli_surface():
     assert required["eddy_v2_bakeoff"] == ["folder"]
     assert required["eddy_v2_review"] == ["run_dir", "long_edit", "motion", "audio", "shorts"]
     assert required["eddy_v2_audio_proof"] == ["run_dir"]
+    bakeoff_schema = next(tool["inputSchema"] for tool in TOOLS if tool["name"] == "eddy_v2_bakeoff")
+    assert "v2_run" in bakeoff_schema["properties"]
 
 
 def test_mcp_initialize_and_stdio_smoke():
@@ -1291,13 +1293,51 @@ def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, mo
     assert Path(result["bakeoff"]).exists()
     report = json.loads(Path(result["bakeoff_json"]).read_text(encoding="utf-8"))
     assert report["candidates"]["eddy_v2"]["audio_proof"]["quality_status"] == "local_degraded_fallback"
-    assert report["completion_audit"]["repo_setup_proof"]["status"] == "requires_external_verification"
+    repo_setup = report["completion_audit"]["repo_setup_proof"]
+    assert repo_setup["status"] == "pass"
+    assert repo_setup["details"]["agent_docs"] == ["AGENTS.md", "EDDY-PLAYBOOK.md"]
+    assert repo_setup["checks"]["required_agent_playbook_surface"] is True
     assert report["completion_audit"]["hero_run_proof"]["status"] == "pass"
     assert report["completion_audit"]["cloud_cost_proof"]["status"] == "blocked"
     assert report["completion_audit"]["caption_proof"]["status"] == "warning"
     assert report["completion_audit"]["caption_proof"]["warning"] == "speech_accurate_subtitles_not_proven"
     assert "pending_lennox_8_of_10_review" in report["completion_audit"]["remaining_blockers"]
     assert any(action["action"] == "record_lennox_quality_review" for action in report["completion_audit"]["unblock_actions"])
+
+
+def test_mcp_bakeoff_can_refresh_existing_v2_run_without_rerender(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setattr(bakeoff_module, "CURRENT_EDDY_RUNS", tmp_path / "empty-current-runs")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+    runs_before = sorted((folder / "eddy-runs").iterdir())
+
+    refreshed = mcp_json(
+        handle(
+            "tools/call",
+            {
+                "name": "eddy_v2_bakeoff",
+                "arguments": {"folder": str(folder), "v2_run": str(result.run_dir), "local_only": True, "target_duration": 2},
+            },
+        )
+    )
+    runs_after = sorted((folder / "eddy-runs").iterdir())
+    report = json.loads((result.run_dir / "bakeoff.json").read_text(encoding="utf-8"))
+
+    assert refreshed["run_dir"] == str(result.run_dir)
+    assert refreshed["bakeoff_json"] == str(result.run_dir / "bakeoff.json")
+    assert runs_after == runs_before
+    assert report["completion_audit"]["repo_setup_proof"]["status"] == "pass"
+    assert any(row["event"] == "bakeoff_ranking" for row in Receipts(result.run_dir / "receipts.jsonl").read_all())
+
+
+def test_bakeoff_existing_v2_run_must_stay_under_source_folder(tmp_path: Path):
+    folder = tmp_path / "footage"
+    outside = tmp_path / "other" / "eddy-runs" / "run"
+    outside.mkdir(parents=True)
+
+    with pytest.raises(ValueError, match="must be under"):
+        resolve_existing_v2_run(folder, outside)
 
 
 def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -1513,11 +1553,12 @@ def test_agent_write_commands_accept_explicit_json_flag():
     parser = build_parser()
 
     edit_args = parser.parse_args(["edit", "/tmp/footage", "--json"])
-    bakeoff_args = parser.parse_args(["bakeoff", "/tmp/footage", "--json"])
+    bakeoff_args = parser.parse_args(["bakeoff", "/tmp/footage", "--json", "--v2-run", "/tmp/run"])
     audio_proof_args = parser.parse_args(["audio-proof", "/tmp/run", "--json"])
 
     assert edit_args.json is True
     assert bakeoff_args.json is True
+    assert bakeoff_args.v2_run == "/tmp/run"
     assert audio_proof_args.json is True
 
 
@@ -1643,6 +1684,8 @@ def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatc
     assert report["comparison"]["status"] == "current_output_proof_missing"
     assert report["candidates"]["eddy_v2"]["audio_proof"]["quality_status"] == "local_degraded_fallback"
     assert report["candidates"]["eddy_v2"]["receipts"]["row_count"] == len(rows)
+    assert report["completion_audit"]["repo_setup_proof"]["status"] == "pass"
+    assert report["completion_audit"]["repo_setup_proof"]["checks"]["no_public_publish_integrations"] is True
     assert (result.run_dir / "bakeoff.json").exists()
     assert (result.run_dir / "bakeoff.md").exists()
     assert any(row["event"] == "bakeoff_compare" and row["status"] == "missing" for row in rows)

@@ -19,11 +19,11 @@ The bake-off exists to answer one question: can Eddy V2 beat the current Eddy pa
 
 1. Run the same hero fixture once per candidate path.
 2. Preserve the full run folder.
-3. Run `eddy bakeoff <hero-folder> --current-run <current-eddy-run>` when a known current Eddy run exists. If the current run is not supplied, Eddy searches `/Users/lennoxsaint/eddy/runs` read-only and writes `current_output_proof_missing` when it cannot prove a comparable final video.
+3. Run `eddy bakeoff <hero-folder> --current-run <current-eddy-run>` when a known current Eddy run exists. If the current run is not supplied, Eddy searches `/Users/lennoxsaint/eddy/runs` read-only and writes `current_output_proof_missing` when it cannot prove a comparable final video. To refresh a report for an existing V2 hero run without rendering again, run `eddy bakeoff <hero-folder> --v2-run <run-dir>`.
 4. Watch the first five minutes, one middle segment, and all Shorts.
 5. Score quality first, then time, then cost.
 6. Record all blockers in receipts and a human scorecard. Do not patch around a blocker without adding a regression test or a gate.
-7. Read `completion_audit` in `bakeoff.json` before declaring a winner. The run folder can prove hero media, Shorts yield, caption provenance, cloud/cost, and human-review state, but repo setup and test proof still require the listed external commands or CI.
+7. Read `completion_audit` in `bakeoff.json` before declaring a winner. The run folder can prove hero media, Shorts yield, caption provenance, cloud/cost, and human-review state. Bakeoff also runs `python scripts/contract_audit.py` to prove repo setup at report time; full test proof still requires the listed external commands or CI.
 8. If `remaining_blockers` is non-empty, follow `unblock_actions` instead of guessing. These actions are secret-safe: they name environment variables and commands, not credential values.
 
 ## Scorecard

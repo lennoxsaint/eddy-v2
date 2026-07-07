@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .audio_retry import retry_audio_proof
-from .bakeoff import build_bakeoff_report
+from .bakeoff import build_bakeoff_report, resolve_existing_v2_run
 from .doctor import doctor_payload
 from .pipeline import edit_folder
 from .quality_review import apply_quality_review
@@ -71,25 +71,36 @@ def scorecard(args: argparse.Namespace) -> int:
 
 
 def bakeoff(args: argparse.Namespace) -> int:
-    result = edit_folder(
-        Path(args.folder),
-        local_only=args.local_only,
-        cloud_budget_usd=args.cloud_budget,
-        target_duration_s=args.target_duration,
-        host_intent_payload=load_intent_payload(args.intent),
-    )
+    folder = Path(args.folder)
+    if args.v2_run:
+        try:
+            run_dir = resolve_existing_v2_run(folder, Path(args.v2_run))
+        except ValueError as exc:
+            print(json.dumps({"status": "blocked", "blocker": "invalid_existing_v2_run", "error": str(exc)}, indent=2))
+            return 2
+        run_payload = build_run_output_payload(run_dir)
+    else:
+        result = edit_folder(
+            folder,
+            local_only=args.local_only,
+            cloud_budget_usd=args.cloud_budget,
+            target_duration_s=args.target_duration,
+            host_intent_payload=load_intent_payload(args.intent),
+        )
+        run_dir = result.run_dir
+        run_payload = build_run_output_payload(result.run_dir, status=result.status, blockers=result.blockers)
     report = build_bakeoff_report(
-        folder=Path(args.folder),
-        v2_run_dir=result.run_dir,
+        folder=folder,
+        v2_run_dir=run_dir,
         current_run_dir=Path(args.current_run) if args.current_run else None,
-        receipts=Receipts(result.run_dir / "receipts.jsonl"),
+        receipts=Receipts(run_dir / "receipts.jsonl"),
     )
     print(
         json.dumps(
             {
-                **build_run_output_payload(result.run_dir, status=result.status, blockers=result.blockers),
-                "bakeoff": str(result.run_dir / "bakeoff.md"),
-                "bakeoff_json": str(result.run_dir / "bakeoff.json"),
+                **run_payload,
+                "bakeoff": str(run_dir / "bakeoff.md"),
+                "bakeoff_json": str(run_dir / "bakeoff.json"),
                 "current_output_proof": report["current_output_proof"],
                 "winner": report["winner"],
                 "remaining_blockers": report["completion_audit"]["remaining_blockers"],
@@ -97,7 +108,7 @@ def bakeoff(args: argparse.Namespace) -> int:
             indent=2,
         )
     )
-    return 0 if result.status == "complete" else 2
+    return 0 if run_payload["status"] == "complete" else 2
 
 
 def review(args: argparse.Namespace) -> int:
@@ -142,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--intent", default=None, help="Path to a host-agent EditIntent JSON object")
         if name == "bakeoff":
             p.add_argument("--current-run", default=None)
+            p.add_argument("--v2-run", default=None, help="Refresh bakeoff for an existing Eddy V2 run without re-editing")
         p.set_defaults(func=func)
     for name, func in (("status", status), ("artifacts", artifacts), ("scorecard", scorecard)):
         p = sub.add_parser(name)

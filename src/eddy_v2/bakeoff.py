@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,7 @@ from .receipts import Receipts
 
 
 CURRENT_EDDY_RUNS = Path("/Users/lennoxsaint/eddy/runs")
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,19 @@ def _json(path: Path) -> dict[str, Any]:
     except (json.JSONDecodeError, OSError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def resolve_existing_v2_run(folder: Path, run_dir: Path) -> Path:
+    resolved_folder = folder.resolve()
+    resolved_run = run_dir.resolve()
+    expected_root = resolved_folder / "eddy-runs"
+    if not resolved_run.exists() or not resolved_run.is_dir():
+        raise ValueError(f"existing V2 run not found: {run_dir}")
+    try:
+        resolved_run.relative_to(expected_root)
+    except ValueError as exc:
+        raise ValueError(f"existing V2 run must be under {expected_root}: {run_dir}") from exc
+    return resolved_run
 
 
 def _receipt_rows(path: Path) -> list[dict[str, Any]]:
@@ -274,11 +290,7 @@ def _completion_audit(v2: dict[str, Any]) -> dict[str, Any]:
     actions_raw = final.get("unblock_actions")
     actions = actions_raw if isinstance(actions_raw, list) else []
     return {
-        "repo_setup_proof": {
-            "status": "requires_external_verification",
-            "evidence_command": "python scripts/contract_audit.py",
-            "covers": ["MIT", "permissive deps", "CLI", "MCP", "skill", "docs", "no publish/upload/scheduling code"],
-        },
+        "repo_setup_proof": _repo_setup_proof(),
         "test_proof": {
             "status": "requires_external_verification",
             "evidence_commands": [
@@ -299,6 +311,52 @@ def _completion_audit(v2: dict[str, Any]) -> dict[str, Any]:
         "remaining_blockers": remaining,
         "unblock_actions": actions,
     }
+
+
+def _repo_setup_proof() -> dict[str, Any]:
+    command = [sys.executable, "scripts/contract_audit.py"]
+    proof: dict[str, Any] = {
+        "status": "requires_external_verification",
+        "evidence_command": "python scripts/contract_audit.py",
+        "covers": ["MIT", "permissive deps", "CLI", "MCP", "skill", "docs", "no publish/upload/scheduling code"],
+    }
+    audit = ROOT / "scripts" / "contract_audit.py"
+    if not audit.exists():
+        proof["reason"] = "contract_audit_script_missing"
+        return proof
+    try:
+        proc = subprocess.run(command, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        proof["status"] = "failed"
+        proof["reason"] = "contract_audit_unavailable"
+        proof["error"] = str(exc)
+        return proof
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        payload = {}
+    if proc.returncode == 0 and payload.get("status") == "pass":
+        proof["status"] = "pass"
+        checks = payload.get("checks")
+        if isinstance(checks, dict):
+            proof["checks"] = {str(key): bool(value) for key, value in checks.items()}
+        details = payload.get("details")
+        if isinstance(details, dict):
+            proof["details"] = {
+                "cli_subcommands": details.get("cli_subcommands", []),
+                "mcp_tools": details.get("mcp_tools", []),
+                "identities": details.get("identities", []),
+                "agent_docs": details.get("agent_docs", []),
+                "forbidden_publication_findings": details.get("forbidden_publication_findings", []),
+            }
+        return proof
+    proof["status"] = "failed"
+    proof["exit_code"] = proc.returncode
+    proof["stdout_tail"] = proc.stdout[-2000:]
+    proof["stderr_tail"] = proc.stderr[-2000:]
+    if isinstance(payload.get("checks"), dict):
+        proof["checks"] = payload["checks"]
+    return proof
 
 
 def _comparison(v2: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:

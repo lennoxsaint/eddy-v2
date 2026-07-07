@@ -48,6 +48,7 @@ eddy scorecard /path/to/footage/eddy-runs/<run>
 eddy review /path/to/footage/eddy-runs/<run> --long-edit 8 --motion 8 --audio 8 --shorts 8
 eddy bakeoff /path/to/footage
 eddy bakeoff /path/to/footage --current-run /Users/lennoxsaint/eddy/runs/<run>
+eddy bakeoff /path/to/footage --v2-run /path/to/footage/eddy-runs/<run>
 ```
 
 Read commands and proof retry commands accept `--json` for explicit machine-readable output; `eddy scorecard <run> --json` returns `scorecard.json` instead of the default Markdown scorecard.
@@ -137,7 +138,7 @@ Eddy V2 has no publish, upload, scheduling, or hosted app code. It produces file
 
 ## Bake-Off
 
-See `docs/BAKEOFF.md` for the one-week comparison plan against current Eddy, V2 local-only, V2 cloud quality, and the `video-use` UX baseline. `eddy bakeoff` now writes `bakeoff.json` and `bakeoff.md` into the V2 run folder. It compares against an explicit `--current-run` when provided, otherwise it searches read-only current-Eddy runs under `/Users/lennoxsaint/eddy/runs`; if no final current-Eddy media proof is found, the report records `current_output_proof_missing` instead of inventing a comparison. The bakeoff report also includes `completion_audit`, which separates repo setup proof, test proof, hero-run proof, cloud/cost proof, human review proof, and remaining blockers.
+See `docs/BAKEOFF.md` for the one-week comparison plan against current Eddy, V2 local-only, V2 cloud quality, and the `video-use` UX baseline. `eddy bakeoff` writes `bakeoff.json` and `bakeoff.md` into the V2 run folder; pass `--v2-run` to refresh the report for an existing V2 run without rendering again. It compares against an explicit `--current-run` when provided, otherwise it searches read-only current-Eddy runs under `/Users/lennoxsaint/eddy/runs`; if no final current-Eddy media proof is found, the report records `current_output_proof_missing` instead of inventing a comparison. The bakeoff report also includes `completion_audit`, which separates repo setup proof, test proof, hero-run proof, cloud/cost proof, human review proof, and remaining blockers.
 
 ## Motion Identities
 
