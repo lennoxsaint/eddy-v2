@@ -42,6 +42,85 @@ def _extract_frame(video: Path, output: Path, at_s: float, receipts: Receipts) -
     )
 
 
+def _extract_clip(video: Path, output: Path, start_s: float, duration_s: float, receipts: Receipts) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    run_command(
+        [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            f"{max(0.0, start_s):.3f}",
+            "-i",
+            str(video),
+            "-t",
+            f"{max(0.25, duration_s):.3f}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "+faststart",
+            str(output),
+        ],
+        receipts,
+        event="ffmpeg",
+        timeout_s=300,
+    )
+
+
+def _concat_clips(clips: list[Path], output: Path, receipts: Receipts) -> Path | None:
+    if not clips:
+        return None
+    output.parent.mkdir(parents=True, exist_ok=True)
+    list_path = output.with_suffix(".txt")
+    list_path.write_text("".join(f"file '{clip.as_posix()}'\n" for clip in clips), encoding="utf-8")
+    run_command(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(list_path),
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(output),
+        ],
+        receipts,
+        event="ffmpeg",
+        timeout_s=300,
+    )
+    return output
+
+
+def _build_long_review_reel(long_video: Path, duration: float, review_dir: Path, receipts: Receipts) -> Path | None:
+    clip_duration = min(8.0, max(0.5, duration))
+    clips: list[Path] = []
+    for index, at_s in enumerate(_long_sample_times(duration), start=1):
+        start_s = min(max(0.0, at_s - (clip_duration / 2)), max(0.0, duration - clip_duration))
+        clip = review_dir / "reels" / f"long-clip-{index:02d}.mp4"
+        _extract_clip(long_video, clip, start_s, clip_duration, receipts)
+        clips.append(clip)
+    return _concat_clips(clips, review_dir / "reels" / "long-review-reel.mp4", receipts)
+
+
+def _build_shorts_review_reel(shorts: list[Path], review_dir: Path, receipts: Receipts) -> Path | None:
+    clips: list[Path] = []
+    for index, short in enumerate(shorts, start=1):
+        clip = review_dir / "reels" / f"short-{index:02d}-clip.mp4"
+        _extract_clip(short, clip, 0.0, min(20.0, max(0.5, _duration(short))), receipts)
+        clips.append(clip)
+    return _concat_clips(clips, review_dir / "reels" / "shorts-review-reel.mp4", receipts)
+
+
 def _long_sample_times(duration: float) -> list[float]:
     if duration <= 0:
         return [0.0]
@@ -75,12 +154,19 @@ def build_review_packet(run_dir: Path, long_video: Path, shorts: list[Path], rec
             _extract_frame(short, output, at_s, receipts)
             short_samples.append({"short": str(short), "time_s": at_s, "path": str(output)})
 
+        long_reel = _build_long_review_reel(long_video, long_duration, review_dir, receipts)
+        shorts_reel = _build_shorts_review_reel(shorts, review_dir, receipts)
+
         packet = {
             "status": "pending_lennox_review",
             "winner_bar": "Lennox would publish it; long edit, motion, audio, and Shorts are each 8/10+.",
             "publishable_8_of_10": False,
             "long_video": str(long_video),
             "shorts": [str(path) for path in shorts],
+            "review_reels": {
+                "long": str(long_reel) if long_reel else None,
+                "shorts": str(shorts_reel) if shorts_reel else None,
+            },
             "long_samples": long_samples,
             "short_samples": short_samples,
             "audio_proof_path": str(audio_proof) if audio_proof else None,
@@ -97,6 +183,8 @@ def build_review_packet(run_dir: Path, long_video: Path, shorts: list[Path], rec
             packet=str(packet_path),
             long_sample_count=len(long_samples),
             short_sample_count=len(short_samples),
+            long_review_reel=str(long_reel) if long_reel else None,
+            shorts_review_reel=str(shorts_reel) if shorts_reel else None,
         )
         return packet_path
     except Exception as exc:
@@ -120,6 +208,13 @@ def _markdown(packet: dict[str, Any]) -> str:
     ]
     for criterion in packet["criteria"]:
         lines.append(f"- {criterion['name']}: pending Lennox score >= {criterion['required_score']}/10")
+    reels_raw = packet.get("review_reels")
+    reels: dict[str, Any] = reels_raw if isinstance(reels_raw, dict) else {}
+    lines.extend(["", "## Review Reels", ""])
+    if reels.get("long"):
+        lines.append(f"- long: {reels['long']}")
+    if reels.get("shorts"):
+        lines.append(f"- shorts: {reels['shorts']}")
     lines.extend(["", "## Long Samples", ""])
     for sample in packet["long_samples"]:
         lines.append(f"- {sample['time_s']}s: {sample['path']}")

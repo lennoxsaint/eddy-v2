@@ -222,6 +222,20 @@ def _caption_proof(run_dir: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _review_reels_proof(review_packet: Any) -> dict[str, Any]:
+    packet = read_json_object(Path(str(review_packet))) if review_packet else None
+    reels_raw = packet.get("review_reels") if isinstance(packet, dict) else None
+    reels = reels_raw if isinstance(reels_raw, dict) else {}
+    long_reel = reels.get("long")
+    shorts_reel = reels.get("shorts")
+    return {
+        "long": str(long_reel) if long_reel else None,
+        "shorts": str(shorts_reel) if shorts_reel else None,
+        "long_exists": _bool_path_exists(long_reel),
+        "shorts_exists": _bool_path_exists(shorts_reel),
+    }
+
+
 def _review_command(run_dir: Path) -> str:
     quoted = shlex.quote(str(run_dir))
     return f"eddy review {quoted} --long-edit 8 --motion 8 --audio 8 --shorts 8"
@@ -294,6 +308,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
     long_video_exists = _bool_path_exists(long_video)
     launch_kit = run_dir / "final" / "launch-kit" / "launch-kit.json"
     review_packet = scorecard.get("review_packet")
+    review_reels = _review_reels_proof(review_packet)
     shorts_count = int(scorecard.get("shorts_count") or 0)
     shorts_shortfall = any(row.get("event") == "shorts_quality_shortfall" for row in rows)
     spent = float(cost.get("spent_usd") or 0.0)
@@ -316,6 +331,10 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
         hero_missing.append("launch_kit")
     if not _bool_path_exists(review_packet):
         hero_missing.append("review_packet")
+    if not review_reels["long_exists"]:
+        hero_missing.append("review_reel:long")
+    if shorts_count > 0 and not review_reels["shorts_exists"]:
+        hero_missing.append("review_reel:shorts")
     if source_hash_intact is not True:
         hero_missing.append("source_hash_intact")
     failed_gates = [name for name, status in gate_statuses.items() if status != "pass"]
@@ -344,6 +363,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
             "long_video_exists": long_video_exists,
             "launch_kit_exists": launch_kit.exists(),
             "review_packet_exists": _bool_path_exists(review_packet),
+            "review_reels": review_reels,
             "source_hash_intact": source_hash_intact,
             "required_gates_pass": required_gates_pass,
             "gate_statuses": gate_statuses,

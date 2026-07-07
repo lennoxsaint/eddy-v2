@@ -248,6 +248,8 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert any(row["event"] == "motion_composite" and row["surface"] == "long" for row in rows)
     assert any(row["event"] == "motion_composite" and row["surface"] == "shorts" for row in rows)
     assert scorecard["proof_layers"]["hero_run_proof"]["status"] == "pass"
+    assert scorecard["proof_layers"]["hero_run_proof"]["review_reels"]["long_exists"] is True
+    assert scorecard["proof_layers"]["hero_run_proof"]["review_reels"]["shorts_exists"] is True
     assert scorecard["proof_layers"]["cloud_cost_proof"]["status"] == "blocked"
     assert scorecard["proof_layers"]["caption_proof"]["status"] == "warning"
     assert scorecard["proof_layers"]["caption_proof"]["sidecar_source"] == "editorial_callouts"
@@ -297,6 +299,10 @@ def test_review_packet_is_written_for_completed_run(tmp_path: Path, monkeypatch:
     assert (result.run_dir / "final" / "review" / "README.md").exists()
     assert packet["status"] == "pending_lennox_review"
     assert packet["publishable_8_of_10"] is False
+    assert Path(packet["review_reels"]["long"]).exists()
+    assert Path(packet["review_reels"]["shorts"]).exists()
+    assert packet["review_reels"]["long"].endswith("long-review-reel.mp4")
+    assert packet["review_reels"]["shorts"].endswith("shorts-review-reel.mp4")
     assert {criterion["name"] for criterion in packet["criteria"]} == {
         "long_edit_story",
         "motion_graphics",
@@ -306,7 +312,9 @@ def test_review_packet_is_written_for_completed_run(tmp_path: Path, monkeypatch:
     assert packet["long_samples"]
     assert packet["short_samples"]
     assert all(Path(sample["path"]).exists() for sample in packet["long_samples"] + packet["short_samples"])
-    assert any(row["event"] == "review_packet" and row["status"] == "pass" for row in rows)
+    review_receipt = next(row for row in rows if row["event"] == "review_packet" and row["status"] == "pass")
+    assert Path(review_receipt["long_review_reel"]).exists()
+    assert Path(review_receipt["shorts_review_reel"]).exists()
 
 
 def test_motion_project_has_dense_plan_and_visual_qa(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
