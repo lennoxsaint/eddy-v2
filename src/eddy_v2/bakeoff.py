@@ -208,8 +208,8 @@ def build_bakeoff_report(
 
     comparison = _comparison(v2, current)
     completion_audit = _completion_audit(v2)
-    winner = "undecided_pending_lennox_8_of_10_review"
     remaining_blockers = completion_audit["remaining_blockers"]
+    winner = _winner(completion_audit)
     report = {
         "hero_folder": str(folder.resolve()),
         "winner": winner,
@@ -240,6 +240,19 @@ def build_bakeoff_report(
             remaining_blockers=remaining_blockers,
         )
     return report
+
+
+def _winner(completion_audit: dict[str, Any]) -> str:
+    remaining = completion_audit.get("remaining_blockers")
+    if isinstance(remaining, list) and remaining:
+        if "pending_lennox_8_of_10_review" in remaining:
+            return "undecided_pending_lennox_8_of_10_review"
+        return "blocked"
+    final_raw = completion_audit.get("human_review_proof")
+    final = final_raw if isinstance(final_raw, dict) else {}
+    if final.get("publishable_8_of_10") is True:
+        return "eddy_v2"
+    return "blocked"
 
 
 def _completion_audit(v2: dict[str, Any]) -> dict[str, Any]:
@@ -279,9 +292,15 @@ def _completion_audit(v2: dict[str, Any]) -> dict[str, Any]:
 
 
 def _comparison(v2: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    proof_layers_raw = v2.get("proof_layers")
+    proof_layers = proof_layers_raw if isinstance(proof_layers_raw, dict) else {}
+    human_raw = proof_layers.get("human_review_proof")
+    human = human_raw if isinstance(human_raw, dict) else {}
+    human_review_status = str(human.get("status") or "pending_lennox_8_of_10_review")
     if current.get("status") == "missing":
         return {
             "status": "current_output_proof_missing",
+            "human_quality_review": human_review_status,
             "notes": ["Current Eddy final media proof was not found, so quality comparison remains pending."],
         }
     v2_long = v2["long_video"]
@@ -294,7 +313,7 @@ def _comparison(v2: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
         "current_source_hash_intact": current.get("source_hash_intact"),
         "v2_audio_quality": (v2.get("audio_proof") or {}).get("quality_status"),
         "current_audio_quality": (current.get("audio_proof") or {}).get("quality_status"),
-        "human_quality_review": "pending_lennox_8_of_10_review",
+        "human_quality_review": human_review_status,
     }
 
 
@@ -364,7 +383,7 @@ def _markdown(report: dict[str, Any]) -> str:
         lines.append(f"- shorts_count_delta: {comparison['shorts_count_delta']}")
     if comparison.get("notes"):
         lines.extend(f"- note: {note}" for note in comparison["notes"])
-    lines.append("- human_quality_review: pending_lennox_8_of_10_review")
+    lines.append(f"- human_quality_review: {comparison.get('human_quality_review', 'pending_lennox_8_of_10_review')}")
     lines.extend(
         [
             "",

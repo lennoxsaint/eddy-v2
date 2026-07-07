@@ -23,6 +23,7 @@ from eddy_v2.pipeline import edit_folder
 from eddy_v2.policy import CLOUD_SURFACES, RunPolicy
 from eddy_v2.proof import audio_gate_blockers
 from eddy_v2.qa import validate_cut_integrity, validate_motion_artifact, validate_short_video
+from eddy_v2.quality_review import apply_quality_review
 from eddy_v2.receipts import Receipts
 from eddy_v2.render import render_shorts
 from eddy_v2.sources import discover_sources, lock_sources
@@ -1440,3 +1441,49 @@ def test_bakeoff_compares_explicit_current_run(tmp_path: Path, monkeypatch: pyte
     assert report["comparison"]["status"] == "metrics_compared"
     assert report["comparison"]["shorts_count_delta"] == 0
     assert report["comparison"]["v2_audio_quality"] == "local_degraded_fallback"
+
+
+def test_bakeoff_selects_v2_after_publishable_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 20)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
+    result = edit_folder(folder, target_duration_s=2)
+    reviewed = apply_quality_review(
+        result.run_dir,
+        {
+            "long_edit_story": 8,
+            "motion_graphics": 8,
+            "audio_polish": 8,
+            "shorts_watchability": 8,
+        },
+    )
+    current = tmp_path / "current-eddy-run"
+    (current / "final").mkdir(parents=True)
+    (current / "final" / "video.mp4").write_bytes((folder / "camera.mp4").read_bytes())
+    (current / "scorecard.json").write_text(
+        json.dumps({"status": "complete", "blockers": [], "cost": {"spent_usd": 0.0, "cap_usd": 25.0}}),
+        encoding="utf-8",
+    )
+    Receipts(current / "receipts.jsonl").log("run_opened", sources={"camera": str(folder / "camera.mp4"), "screen": str(folder / "screen.mp4")})
+
+    report = build_bakeoff_report(
+        folder=folder,
+        v2_run_dir=result.run_dir,
+        current_run_dir=current,
+        receipts=Receipts(result.run_dir / "receipts.jsonl"),
+    )
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    ranking = [row for row in rows if row["event"] == "bakeoff_ranking"][-1]
+    bakeoff_md = (result.run_dir / "bakeoff.md").read_text(encoding="utf-8")
+
+    assert reviewed["publishable_8_of_10"] is True
+    assert report["winner"] == "eddy_v2"
+    assert report["comparison"]["human_quality_review"] == "pass"
+    assert report["completion_audit"]["remaining_blockers"] == []
+    assert ranking["status"] == "pass"
+    assert ranking["winner"] == "eddy_v2"
+    assert ranking["reason"] == "all_gates_passed"
+    assert ranking["remaining_blockers"] == []
+    assert "- winner: eddy_v2" in bakeoff_md
+    assert "- human_quality_review: pass" in bakeoff_md
