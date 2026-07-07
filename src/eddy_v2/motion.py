@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from .commands import run_command
-from .identities import Identity, load_identity
+from .identities import load_identity
 from .receipts import Receipts
 
 

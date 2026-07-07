@@ -9,6 +9,7 @@ from .commands import duration_s, ffprobe_json, run_command
 from .cost import CostTracker
 from .models import EditIntent
 from .motion import create_motion_project, run_hyperframes
+from .plan import EditPlan
 from .policy import RunPolicy
 from .receipts import Receipts
 from .sources import Sources
@@ -37,6 +38,7 @@ def render_long(
     receipts: Receipts,
     policy: RunPolicy,
     cost: CostTracker,
+    plan: EditPlan | None = None,
 ) -> Path:
     final_dir = run_dir / "final"
     quarantine = run_dir / "quarantine"
@@ -48,7 +50,8 @@ def render_long(
 
     output = final_dir / "video.mp4"
     source_duration = duration_s(sources.camera)
-    target = min(intent.target_duration_s, source_duration)
+    start = plan.long_segment.start_s if plan else 0.0
+    target = min(plan.long_segment.duration_s if plan else intent.target_duration_s, source_duration - start)
     long_hook_file = drawtext_file(run_dir, "long-hook", intent.hook, width=52)
     if sources.screen:
         filter_complex = (
@@ -62,14 +65,22 @@ def render_long(
         args = [
             "ffmpeg",
             "-y",
+            "-ss",
+            f"{start:.3f}",
             "-t",
             f"{target:.3f}",
             "-i",
             str(sources.camera),
+            "-ss",
+            f"{start:.3f}",
             "-t",
             f"{target:.3f}",
             "-i",
             str(sources.screen),
+            "-ss",
+            f"{start:.3f}",
+            "-t",
+            f"{target:.3f}",
             "-i",
             str(audio),
             "-filter_complex",
@@ -95,10 +106,16 @@ def render_long(
         args = [
             "ffmpeg",
             "-y",
+            "-ss",
+            f"{start:.3f}",
             "-t",
             f"{target:.3f}",
             "-i",
             str(sources.camera),
+            "-ss",
+            f"{start:.3f}",
+            "-t",
+            f"{target:.3f}",
             "-i",
             str(audio),
             "-vf",
@@ -128,7 +145,7 @@ def render_long(
     return output
 
 
-def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts: Receipts) -> list[Path]:
+def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts: Receipts, *, plan: EditPlan | None = None) -> list[Path]:
     shorts_dir = run_dir / "final" / "shorts"
     shorts_dir.mkdir(parents=True, exist_ok=True)
     create_motion_project(run_dir, intent.identity, intent.hook, portrait=True)
@@ -136,8 +153,8 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
     source_duration = duration_s(sources.camera)
     outputs: list[Path] = []
     short_hook_file = drawtext_file(run_dir, "short-hook", intent.hook, width=28)
-    for index in range(intent.shorts_target):
-        start = float(index * 20)
+    starts = plan.short_starts_s if plan else [float(index * 20) for index in range(intent.shorts_target)]
+    for index, start in enumerate(starts[: intent.shorts_target]):
         if start + 10 > source_duration:
             receipts.log("short_candidate", index=index, status="skipped", reason="source too short")
             continue

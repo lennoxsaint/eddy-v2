@@ -8,6 +8,7 @@ from pathlib import Path
 from .commands import ffprobe_json
 from .cost import CostTracker
 from .models import create_intent
+from .plan import create_edit_plan
 from .policy import RunPolicy
 from .receipts import Receipts
 from .render import render_long, render_shorts
@@ -46,15 +47,16 @@ def edit_folder(
     write_manifest(run_dir, sources, before)
     try:
         intent = create_intent(sources, run_dir, receipts, policy, cost, target_duration_s=target_duration_s)
-        video = render_long(sources, run_dir, intent, receipts, policy, cost)
-        shorts = render_shorts(sources, run_dir, intent, receipts)
-        write_launch_kit(run_dir, intent.as_dict(), video, shorts)
-        write_scorecard(run_dir, cost.summary(), long_video=video, shorts=shorts, blockers=blockers)
+        plan = create_edit_plan(sources, run_dir, intent, receipts)
+        video = render_long(sources, run_dir, intent, receipts, policy, cost, plan=plan)
+        shorts = render_shorts(sources, run_dir, intent, receipts, plan=plan)
+        write_launch_kit(run_dir, intent.as_dict(), video, shorts, plan=plan.as_dict())
+        write_scorecard(run_dir, cost.summary(), long_video=video, shorts=shorts, blockers=blockers, plan=plan.as_dict())
         receipts.log("gate", name="final_media_probe", status="pass", probe=ffprobe_json(video))
     except Exception as exc:
         blockers.append(str(exc))
         receipts.log("blocker", code="pipeline_failed", error=str(exc))
-        write_scorecard(run_dir, cost.summary(), long_video=None, shorts=[], blockers=blockers)
+        write_scorecard(run_dir, cost.summary(), long_video=None, shorts=[], blockers=blockers, plan=None)
     finally:
         after = lock_sources(sources, receipts, phase="after")
         if before != after:
@@ -64,7 +66,7 @@ def edit_folder(
     return RunResult(run_dir=run_dir, status="blocked" if blockers else "complete", blockers=blockers)
 
 
-def write_launch_kit(run_dir: Path, intent: dict, video: Path, shorts: list[Path]) -> None:
+def write_launch_kit(run_dir: Path, intent: dict, video: Path, shorts: list[Path], *, plan: dict | None) -> None:
     kit = run_dir / "final" / "launch-kit"
     kit.mkdir(parents=True, exist_ok=True)
     data = {
@@ -73,6 +75,7 @@ def write_launch_kit(run_dir: Path, intent: dict, video: Path, shorts: list[Path
         "chapters": [{"time": "00:00", "title": "Opening"}],
         "long_video": str(video),
         "shorts": [str(p) for p in shorts],
+        "edit_plan": plan,
     }
     (kit / "launch-kit.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     (kit / "README.md").write_text(f"# {data['title']}\n\n{data['description']}\n", encoding="utf-8")
@@ -85,6 +88,7 @@ def write_scorecard(
     long_video: Path | None,
     shorts: list[Path],
     blockers: list[str],
+    plan: dict | None,
 ) -> None:
     score = {
         "status": "blocked" if blockers else "complete",
@@ -95,6 +99,7 @@ def write_scorecard(
         "cost": cost_summary,
         "publishable_8_of_10": False,
         "notes": "Lennox taste score is required before claiming bakeoff victory.",
+        "edit_plan": plan,
     }
     (run_dir / "scorecard.json").write_text(json.dumps(score, indent=2), encoding="utf-8")
     (run_dir / "scorecard.md").write_text(

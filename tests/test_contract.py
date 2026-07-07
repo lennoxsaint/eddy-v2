@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +12,7 @@ from eddy_v2.commands import ffprobe_json
 from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import TOOLS
 from eddy_v2.models import EditIntent
+from eddy_v2.plan import create_edit_plan, select_short_starts
 from eddy_v2.pipeline import edit_folder
 from eddy_v2.policy import CLOUD_SURFACES, RunPolicy
 from eddy_v2.receipts import Receipts
@@ -82,6 +82,71 @@ def make_layered_fixture(folder: Path, duration: int = 4) -> Path:
     return folder
 
 
+def make_silence_then_tone_fixture(folder: Path) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    camera = folder / "camera.mp4"
+    screen = folder / "screen.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=640x360:rate=30:duration=8",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=channel_layout=mono:sample_rate=44100:duration=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=660:duration=6",
+            "-filter_complex",
+            "[1:a][2:a]concat=n=2:v=0:a=1[a]",
+            "-map",
+            "0:v",
+            "-map",
+            "[a]",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            str(camera),
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=0x0f172a:size=1280x720:rate=30:duration=8",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=220:duration=8",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            str(screen),
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return folder
+
+
 def test_source_hashing_is_stable(tmp_path: Path):
     folder = make_layered_fixture(tmp_path / "footage", 2)
     receipts = Receipts(tmp_path / "receipts.jsonl")
@@ -111,7 +176,50 @@ def test_receipts_cover_core_events(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     result = edit_folder(folder, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     events = {row["event"] for row in rows}
-    assert {"run_start", "source_hash", "ffmpeg", "hyperframes", "gate", "run_finish"} <= events
+    assert {"run_start", "source_hash", "ffmpeg", "hyperframes", "cut_plan", "gate", "run_finish"} <= events
+
+
+def test_edit_plan_skips_leading_silence(tmp_path: Path):
+    folder = make_silence_then_tone_fixture(tmp_path / "footage")
+    receipts = Receipts(tmp_path / "receipts.jsonl")
+    intent = EditIntent(
+        target_duration_s=3,
+        identity="code-cinema",
+        shorts_target=3,
+        hook="Cut the dead air",
+        title="Plan Test",
+    )
+    plan = create_edit_plan(discover_sources(folder), tmp_path / "run", intent, receipts)
+    rows = receipts.read_all()
+    assert plan.long_segment.start_s >= 1.5
+    assert (tmp_path / "run" / "edit-plan.json").exists()
+    assert any(row["event"] == "cut_plan" and row["status"] == "pass" for row in rows)
+
+
+def test_short_starts_distribute_across_long_source():
+    starts = select_short_starts([(0, 120)], 120, 3)
+    assert len(starts) == 3
+    assert starts[0] >= 0
+    assert starts[1] - starts[0] >= 15
+    assert starts[2] - starts[1] >= 15
+
+
+def test_short_starts_use_speech_density_not_only_long_bursts():
+    intervals = [
+        (10, 12),
+        (14, 18),
+        (40, 45),
+        (47, 51),
+        (83, 87),
+        (89, 95),
+        (116, 121),
+        (123, 126),
+    ]
+    starts = select_short_starts(intervals, 140, 3)
+    assert len(starts) == 3
+    assert all(any(start < end and start + 15 > interval_start for interval_start, end in intervals) for start in starts)
+    assert starts[1] - starts[0] >= 15
+    assert starts[2] - starts[1] >= 15
 
 
 def test_cost_cap_blocks(tmp_path: Path):
