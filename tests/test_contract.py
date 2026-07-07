@@ -1449,6 +1449,20 @@ def test_bakeoff_selects_v2_after_publishable_review(tmp_path: Path, monkeypatch
     monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
     monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
     result = edit_folder(folder, target_duration_s=2)
+    current = tmp_path / "current-eddy-run"
+    (current / "final").mkdir(parents=True)
+    (current / "final" / "video.mp4").write_bytes((folder / "camera.mp4").read_bytes())
+    (current / "scorecard.json").write_text(
+        json.dumps({"status": "complete", "blockers": [], "cost": {"spent_usd": 0.0, "cap_usd": 25.0}}),
+        encoding="utf-8",
+    )
+    Receipts(current / "receipts.jsonl").log("run_opened", sources={"camera": str(folder / "camera.mp4"), "screen": str(folder / "screen.mp4")})
+    before_review = build_bakeoff_report(
+        folder=folder,
+        v2_run_dir=result.run_dir,
+        current_run_dir=current,
+        receipts=Receipts(result.run_dir / "receipts.jsonl"),
+    )
     reviewed = apply_quality_review(
         result.run_dir,
         {
@@ -1458,29 +1472,18 @@ def test_bakeoff_selects_v2_after_publishable_review(tmp_path: Path, monkeypatch
             "shorts_watchability": 8,
         },
     )
-    current = tmp_path / "current-eddy-run"
-    (current / "final").mkdir(parents=True)
-    (current / "final" / "video.mp4").write_bytes((folder / "camera.mp4").read_bytes())
-    (current / "scorecard.json").write_text(
-        json.dumps({"status": "complete", "blockers": [], "cost": {"spent_usd": 0.0, "cap_usd": 25.0}}),
-        encoding="utf-8",
-    )
-    Receipts(current / "receipts.jsonl").log("run_opened", sources={"camera": str(folder / "camera.mp4"), "screen": str(folder / "screen.mp4")})
-
-    report = build_bakeoff_report(
-        folder=folder,
-        v2_run_dir=result.run_dir,
-        current_run_dir=current,
-        receipts=Receipts(result.run_dir / "receipts.jsonl"),
-    )
+    report = json.loads((result.run_dir / "bakeoff.json").read_text(encoding="utf-8"))
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     ranking = [row for row in rows if row["event"] == "bakeoff_ranking"][-1]
     bakeoff_md = (result.run_dir / "bakeoff.md").read_text(encoding="utf-8")
 
+    assert before_review["winner"] == "undecided_pending_lennox_8_of_10_review"
     assert reviewed["publishable_8_of_10"] is True
     assert report["winner"] == "eddy_v2"
+    assert report["current_output_proof"]["run_dir"] == str(current)
     assert report["comparison"]["human_quality_review"] == "pass"
     assert report["completion_audit"]["remaining_blockers"] == []
+    assert any(row["event"] == "bakeoff_refresh" and row["status"] == "pass" and row["winner"] == "eddy_v2" for row in rows)
     assert ranking["status"] == "pass"
     assert ranking["winner"] == "eddy_v2"
     assert ranking["reason"] == "all_gates_passed"

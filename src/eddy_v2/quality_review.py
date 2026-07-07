@@ -71,6 +71,48 @@ def _update_scorecard_md(path: Path, review: dict[str, Any]) -> None:
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _footage_folder_for_run(run_dir: Path) -> Path | None:
+    if run_dir.parent.name != "eddy-runs":
+        return None
+    return run_dir.parent.parent
+
+
+def _existing_current_run(run_dir: Path) -> Path | None:
+    bakeoff = read_json_object(run_dir / "bakeoff.json")
+    if not bakeoff:
+        return None
+    current_raw = bakeoff.get("current_output_proof")
+    current = current_raw if isinstance(current_raw, dict) else {}
+    run = current.get("run_dir")
+    return Path(str(run)) if run else None
+
+
+def _refresh_existing_bakeoff(run_dir: Path, receipts: Receipts) -> None:
+    if not (run_dir / "bakeoff.json").exists():
+        return
+    folder = _footage_folder_for_run(run_dir)
+    if folder is None:
+        receipts.log("bakeoff_refresh", status="skipped", reason="run_dir_not_under_eddy_runs", run_dir=str(run_dir))
+        return
+    try:
+        from .bakeoff import build_bakeoff_report
+
+        report = build_bakeoff_report(
+            folder=folder,
+            v2_run_dir=run_dir,
+            current_run_dir=_existing_current_run(run_dir),
+            receipts=receipts,
+        )
+        receipts.log(
+            "bakeoff_refresh",
+            status="pass",
+            report=str(run_dir / "bakeoff.json"),
+            winner=report.get("winner"),
+        )
+    except Exception as exc:
+        receipts.log("bakeoff_refresh", status="failed", error=str(exc), run_dir=str(run_dir))
+
+
 def apply_quality_review(
     run_dir: Path,
     scores: dict[str, float],
@@ -119,7 +161,8 @@ def apply_quality_review(
     _update_scorecard_md(run_dir / "scorecard.md", review)
     refresh_scorecard_proof_layers(run_dir)
 
-    Receipts(run_dir / "receipts.jsonl").log(
+    receipts = Receipts(run_dir / "receipts.jsonl")
+    receipts.log(
         "quality_review",
         status=review["status"],
         reviewer=reviewer,
@@ -127,4 +170,5 @@ def apply_quality_review(
         publishable_8_of_10=publishable,
         blocking_reasons=blocking_reasons,
     )
+    _refresh_existing_bakeoff(run_dir, receipts)
     return review
