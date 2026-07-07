@@ -11,6 +11,7 @@ from .models import EditIntent
 from .motion import create_motion_project, run_hyperframes
 from .plan import EditPlan
 from .policy import RunPolicy
+from .qa import validate_caption_sidecars, validate_long_video, validate_motion_artifact, validate_short_video
 from .receipts import Receipts
 from .sources import Sources
 
@@ -48,8 +49,9 @@ def render_long(
     start = plan.long_segment.start_s if plan else 0.0
     target = max(1.0, min(plan.long_segment.duration_s if plan else intent.target_duration_s, source_duration - start))
     audio = polish_audio(sources, run_dir, receipts, policy, cost, start_s=start, duration_s=target)
-    create_motion_project(run_dir, intent.identity, intent.hook, portrait=False)
-    run_hyperframes(run_dir / "motion" / "long-overlay", receipts)
+    motion_project = create_motion_project(run_dir, intent.identity, intent.hook, portrait=False)
+    motion_output = run_hyperframes(motion_project, receipts)
+    validate_motion_artifact(motion_project, motion_output, receipts, portrait=False)
 
     output = final_dir / "video.mp4"
     long_hook_file = drawtext_file(run_dir, "long-hook", intent.hook, width=52)
@@ -137,15 +139,17 @@ def render_long(
     write_sidecars(final_dir, target, intent.title)
     probe = ffprobe_json(output)
     (final_dir / "video.ffprobe.json").write_text(json.dumps(probe, indent=2), encoding="utf-8")
-    receipts.log("gate", name="long_video_exists", status="pass", output=str(output))
+    validate_caption_sidecars(final_dir, receipts, title=intent.title)
+    validate_long_video(run_dir, output, receipts, expected_duration_s=target)
     return output
 
 
 def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts: Receipts, *, plan: EditPlan | None = None) -> list[Path]:
     shorts_dir = run_dir / "final" / "shorts"
     shorts_dir.mkdir(parents=True, exist_ok=True)
-    create_motion_project(run_dir, intent.identity, intent.hook, portrait=True)
-    run_hyperframes(run_dir / "motion" / "shorts-card", receipts, portrait=True)
+    motion_project = create_motion_project(run_dir, intent.identity, intent.hook, portrait=True)
+    motion_output = run_hyperframes(motion_project, receipts, portrait=True)
+    validate_motion_artifact(motion_project, motion_output, receipts, portrait=True)
     source_duration = duration_s(sources.camera)
     outputs: list[Path] = []
     short_hook_file = drawtext_file(run_dir, "short-hook", intent.hook, width=28)
@@ -224,9 +228,11 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
             ]
         try:
             run_command(args, receipts, event="ffmpeg", timeout_s=1800)
-            ffprobe_json(out)
-            receipts.log("short_rendered", index=index, status="pass", output=str(out))
-            outputs.append(out)
+            if validate_short_video(run_dir, out, receipts, index=index):
+                receipts.log("short_rendered", index=index, status="pass", output=str(out))
+                outputs.append(out)
+            else:
+                receipts.log("short_rendered", index=index, status="failed", reason="short_media_integrity_failed")
         except Exception as exc:
             q = run_dir / "quarantine" / out.name
             if out.exists():

@@ -81,8 +81,28 @@ def create_motion_project(run_dir: Path, identity_slug: str, hook: str, *, portr
 def run_hyperframes(project: Path, receipts: Receipts, *, portrait: bool = False) -> Path:
     output = project / ("motion-card.mp4" if portrait else "overlay.mp4")
     if os.environ.get("EDDY_V2_FAKE_HYPERFRAMES"):
+        width, height = (1080, 1920) if portrait else (1920, 1080)
         receipts.log("hyperframes", phase="fake_lint", project=str(project), status="pass")
         receipts.log("hyperframes", phase="fake_inspect", project=str(project), status="pass")
+        run_command(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=c=black:s={width}x{height}:r=30:d=6",
+                "-an",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                str(output),
+            ],
+            receipts,
+            event="ffmpeg",
+            timeout_s=120,
+        )
         receipts.log("hyperframes", phase="fake_render", project=str(project), output=str(output), status="pass")
         return output
     for command in ("lint", "inspect"):

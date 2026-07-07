@@ -15,6 +15,7 @@ from eddy_v2.models import EditIntent
 from eddy_v2.plan import create_edit_plan, select_short_starts
 from eddy_v2.pipeline import edit_folder
 from eddy_v2.policy import CLOUD_SURFACES, RunPolicy
+from eddy_v2.qa import validate_short_video
 from eddy_v2.receipts import Receipts
 from eddy_v2.render import render_shorts
 from eddy_v2.sources import discover_sources, lock_sources
@@ -179,6 +180,28 @@ def test_receipts_cover_core_events(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     events = {row["event"] for row in rows}
     assert {"run_start", "source_hash", "ffmpeg", "hyperframes", "cut_plan", "gate", "run_finish"} <= events
+
+
+def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 16)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    gates = {row["name"] for row in rows if row["event"] == "gate" and row["status"] == "pass"}
+    assert result.status == "complete"
+    assert {"motion_artifact", "caption_sidecars", "long_media_integrity", "short_media_integrity", "launch_package", "final_media_probe"} <= gates
+
+
+def test_corrupt_short_is_quarantined_not_counted(tmp_path: Path):
+    receipts = Receipts(tmp_path / "receipts.jsonl")
+    output = tmp_path / "final" / "shorts" / "short-01.mp4"
+    output.parent.mkdir(parents=True)
+    output.write_text("not an mp4", encoding="utf-8")
+    assert validate_short_video(tmp_path, output, receipts, index=0) is False
+    rows = receipts.read_all()
+    assert not output.exists()
+    assert (tmp_path / "quarantine" / "short-01.mp4").exists()
+    assert any(row["event"] == "gate" and row["name"] == "short_media_integrity" and row["status"] == "failed" for row in rows)
 
 
 def test_edit_plan_skips_leading_silence(tmp_path: Path):

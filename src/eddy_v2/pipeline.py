@@ -10,6 +10,7 @@ from .cost import CostTracker
 from .models import create_intent
 from .plan import create_edit_plan
 from .policy import RunPolicy
+from .qa import validate_launch_package
 from .receipts import Receipts
 from .render import render_long, render_shorts
 from .sources import discover_sources, lock_sources, write_manifest
@@ -52,6 +53,7 @@ def edit_folder(
         shorts = render_shorts(sources, run_dir, intent, receipts, plan=plan)
         write_launch_kit(run_dir, intent.as_dict(), video, shorts, plan=plan.as_dict())
         write_scorecard(run_dir, cost.summary(), long_video=video, shorts=shorts, blockers=blockers, plan=plan.as_dict())
+        validate_launch_package(run_dir, video, shorts, receipts)
         receipts.log("gate", name="final_media_probe", status="pass", probe=ffprobe_json(video))
     except Exception as exc:
         blockers.append(str(exc))
