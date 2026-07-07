@@ -286,6 +286,7 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
     scorecard_md = (result.run_dir / "scorecard.md").read_text(encoding="utf-8")
+    audio_proof = json.loads((result.run_dir / "final" / "audio-proof.json").read_text(encoding="utf-8"))
     caption_provenance = json.loads((result.run_dir / "final" / "caption-provenance.json").read_text(encoding="utf-8"))
     gates = {row["name"] for row in rows if row["event"] == "gate" and row["status"] == "pass"}
     assert result.status == "blocked"
@@ -331,6 +332,23 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert attempts["descript"]["missing"] == ["DESCRIPT_API_KEY"]
     assert "pending_lennox_8_of_10_review" in scorecard["proof_layers"]["final_publishability"]["blockers"]
     assert scorecard["proof_layers"]["cloud_cost_proof"]["audio_retry_command"].startswith("eddy audio-proof ")
+    assert audio_proof["provider_attempts"]["descript"]["status"] == "skipped"
+    assert audio_proof["provider_attempts"]["descript"]["missing"] == ["DESCRIPT_API_KEY"]
+    assert audio_proof["provider_attempts"]["descript"]["uploaded_media"] == "none"
+    assert audio_proof["audio_retry_command"].startswith("eddy audio-proof ")
+    assert audio_proof["allowed_upload_scope"] == {
+        "descript": "audio_extract_only",
+        "auphonic": "audio_extract_only",
+        "elevenlabs": "audio_extract_only",
+        "full_video_upload_default": False,
+    }
+    assert {
+        "provider": "descript",
+        "required": ["DESCRIPT_API_KEY"],
+        "unlocks": "strong_studio_sound",
+        "uploads": "audio_extract_only",
+    } in audio_proof["audio_quality_unblock_options"]
+    assert audio_proof["strong_studio_sound_unblock"] == ["DESCRIPT_API_KEY"]
     final_blocker_rows = [
         row for row in rows if row["event"] == "blocker" and row.get("scope") == "final_publishability" and row.get("status") == "active"
     ]
@@ -1290,6 +1308,9 @@ def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest
     assert audio_proof["strong_studio_sound"] is True
     assert audio_proof["cloud_quality_profile"]["audio"]["strong_studio_sound_ready"] is True
     assert audio_proof["quality_blockers"] == []
+    assert audio_proof["provider_attempts"]["descript"]["status"] == "pass"
+    assert audio_proof["allowed_upload_scope"]["descript"] == "audio_extract_only"
+    assert audio_proof["allowed_upload_scope"]["full_video_upload_default"] is False
     assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
     assert "test-key" not in json.dumps(scorecard)
     audio_proof_receipt = [row for row in rows if row["event"] == "audio_proof"][-1]
@@ -1333,6 +1354,8 @@ def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_pat
     assert list((result.run_dir / "quarantine").glob("video-before-audio-proof-retry-*.mp4"))
     assert audio_proof["quality_status"] == "strong_studio_sound"
     assert audio_proof["quality_blockers"] == []
+    assert audio_proof["provider_attempts"]["descript"]["status"] == "pass"
+    assert audio_proof["audio_retry_command"].startswith("eddy audio-proof ")
     assert scorecard["status"] == "complete"
     assert scorecard["blockers"] == []
     assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
@@ -1382,6 +1405,8 @@ def test_audio_proof_retry_local_only_refuses_cloud_without_fake_upload(tmp_path
     latest_audio_gate = [row for row in rows if row["event"] == "gate" and row["name"] == "audio_quality"][-1]
     assert latest_audio_gate["status"] == "failed"
     assert "strong_studio_sound_not_proven" in audio_proof["quality_blockers"]
+    assert audio_proof["provider_attempts"]["descript"]["status"] == "failed"
+    assert audio_proof["allowed_upload_scope"]["full_video_upload_default"] is False
 
 
 def test_mocked_auphonic_fallback_is_selected_after_descript_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

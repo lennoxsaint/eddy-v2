@@ -92,6 +92,14 @@ def summarize_audio_proof(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _cloud_budget_from_rows(rows: list[dict[str, Any]]) -> float:
+    start = _latest(rows, "run_start") or {}
+    try:
+        return float(start.get("cloud_budget_usd", 25.0))
+    except (TypeError, ValueError):
+        return 25.0
+
+
 def read_json_object(path: Path | None) -> dict[str, Any] | None:
     if path is None or not path.exists():
         return None
@@ -583,7 +591,24 @@ def refresh_scorecard_proof_layers(
 
 
 def write_audio_proof(run_dir: Path, receipts: Receipts) -> Path:
-    proof = summarize_audio_proof(receipts.read_all())
+    rows = receipts.read_all()
+    proof = summarize_audio_proof(rows)
+    audio_profile = _audio_profile(proof)
+    provider_attempts = _audio_provider_attempts(proof)
+    proof["provider_attempts"] = provider_attempts
+    proof["audio_quality_unblock_options"] = (
+        audio_profile.get("audio_quality_unblock_options") if isinstance(audio_profile.get("audio_quality_unblock_options"), list) else []
+    )
+    proof["strong_studio_sound_unblock"] = (
+        audio_profile.get("strong_studio_sound_unblock") if isinstance(audio_profile.get("strong_studio_sound_unblock"), list) else []
+    )
+    proof["audio_retry_command"] = _audio_retry_command(run_dir, _cloud_budget_from_rows(rows))
+    proof["allowed_upload_scope"] = {
+        "descript": "audio_extract_only",
+        "auphonic": "audio_extract_only",
+        "elevenlabs": "audio_extract_only",
+        "full_video_upload_default": False,
+    }
     path = run_dir / "final" / "audio-proof.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(proof, indent=2), encoding="utf-8")
@@ -596,5 +621,8 @@ def write_audio_proof(run_dir: Path, receipts: Receipts) -> Path:
         strong_studio_sound=proof["strong_studio_sound"],
         quality_blockers=proof["quality_blockers"],
         cloud_quality_profile=proof["cloud_quality_profile"],
+        provider_attempts=provider_attempts,
+        audio_retry_command=proof["audio_retry_command"],
+        allowed_upload_scope=proof["allowed_upload_scope"],
     )
     return path
