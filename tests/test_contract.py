@@ -13,6 +13,7 @@ from eddy_v2.bakeoff import build_bakeoff_report
 from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json
 from eddy_v2.cloud_quality import cloud_audio_profile, cloud_model_profile
+from eddy_v2.cli import build_parser
 from eddy_v2.doctor import doctor_payload, onepassword_cli_status
 from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import SERVER_INFO, TOOLS, handle
@@ -1428,6 +1429,16 @@ def test_cli_doctor_runs():
         assert data["node_renderer"]["adapter"].endswith("renderer/hyperframes-runner.mjs")
         assert data["node_renderer"]["exists"] is True
         assert "code-cinema" in data["identities"]
+
+
+def test_agent_write_commands_accept_explicit_json_flag():
+    parser = build_parser()
+
+    edit_args = parser.parse_args(["edit", "/tmp/footage", "--json"])
+    bakeoff_args = parser.parse_args(["bakeoff", "/tmp/footage", "--json"])
+
+    assert edit_args.json is True
+    assert bakeoff_args.json is True
 
 
 def test_node_hyperframes_renderer_contract():

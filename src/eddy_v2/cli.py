@@ -135,6 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, func in (("edit", edit), ("bakeoff", bakeoff)):
         p = sub.add_parser(name)
         p.add_argument("folder")
+        p.add_argument("--json", action="store_true", help="Print machine-readable JSON output.")
         p.add_argument("--local-only", action="store_true")
         p.add_argument("--cloud-budget", type=float, default=25.0)
         p.add_argument("--target-duration", type=float, default=None)
