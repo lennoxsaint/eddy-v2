@@ -11,6 +11,7 @@ from . import __version__
 from .bakeoff import build_bakeoff_report
 from .identities import list_identities
 from .pipeline import edit_folder
+from .quality_review import apply_quality_review
 from .receipts import Receipts
 
 
@@ -105,6 +106,22 @@ def bakeoff(args: argparse.Namespace) -> int:
     return 0 if result.status == "complete" else 2
 
 
+def review(args: argparse.Namespace) -> int:
+    result = apply_quality_review(
+        Path(args.run_dir),
+        {
+            "long_edit_story": args.long_edit,
+            "motion_graphics": args.motion,
+            "audio_polish": args.audio,
+            "shorts_watchability": args.shorts,
+        },
+        reviewer=args.reviewer,
+        notes=args.notes or "",
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result["publishable_8_of_10"] else 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="eddy", description="Eddy V2 proof-gated editor")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -123,6 +140,15 @@ def build_parser() -> argparse.ArgumentParser:
         p = sub.add_parser(name)
         p.add_argument("run_dir")
         p.set_defaults(func=func)
+    p = sub.add_parser("review")
+    p.add_argument("run_dir")
+    p.add_argument("--long-edit", type=float, required=True)
+    p.add_argument("--motion", type=float, required=True)
+    p.add_argument("--audio", type=float, required=True)
+    p.add_argument("--shorts", type=float, required=True)
+    p.add_argument("--reviewer", default="Lennox")
+    p.add_argument("--notes", default="")
+    p.set_defaults(func=review)
     return parser
 
 

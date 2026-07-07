@@ -37,6 +37,7 @@ eddy edit /path/to/footage --intent /path/to/intent.json
 eddy status /path/to/footage/eddy-runs/<run>
 eddy artifacts /path/to/footage/eddy-runs/<run>
 eddy scorecard /path/to/footage/eddy-runs/<run>
+eddy review /path/to/footage/eddy-runs/<run> --long-edit 8 --motion 8 --audio 8 --shorts 8
 eddy bakeoff /path/to/footage
 eddy bakeoff /path/to/footage --current-run /Users/lennoxsaint/eddy/runs/<run>
 ```
@@ -70,6 +71,8 @@ For dry tests, set `EDDY_V2_FAKE_DESCRIPT=1`, `EDDY_V2_FAKE_AUPHONIC=1`, or `EDD
 Before a run can finish as complete, Eddy gates source hashes, HyperFrames motion artifacts, timed caption artifacts, caption sidecars, long-video media integrity, Shorts geometry/duration, audio-proof generation, launch-kit presence, review-packet generation, cost cap, and final ffprobe output. Corrupt Shorts are moved to `quarantine/` and do not count toward the Shorts yield; corrupt long video, motion, captions, source safety, launch package, audio proof, or review packet blocks the run.
 
 Completed runs also write `final/review/review-packet.json` and `final/review/README.md` with sampled long-video and Shorts frames. That packet keeps the human taste gate explicit: Lennox must score the long edit, motion graphics, audio polish, and Shorts watchability at 8/10+ before Eddy can claim a publishable bakeoff win.
+
+Use `eddy review <run> --long-edit <score> --motion <score> --audio <score> --shorts <score>` to record that taste review back into the run. The command updates the review packet and scorecard, but it keeps `publishable_8_of_10` false when machine blockers or audio quality blockers are still present.
 
 ## Scope Boundaries
 

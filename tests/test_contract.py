@@ -670,6 +670,7 @@ def test_mcp_schemas_match_cli_surface():
         "eddy_v2_artifacts",
         "eddy_v2_scorecard",
         "eddy_v2_bakeoff",
+        "eddy_v2_review",
     }
     for tool in TOOLS:
         assert tool["inputSchema"]["type"] == "object"
@@ -680,6 +681,7 @@ def test_mcp_schemas_match_cli_surface():
     assert required["eddy_v2_artifacts"] == ["run_dir"]
     assert required["eddy_v2_scorecard"] == ["run_dir"]
     assert required["eddy_v2_bakeoff"] == ["folder"]
+    assert required["eddy_v2_review"] == ["run_dir", "long_edit", "motion", "audio", "shorts"]
 
 
 def mcp_json(result: dict) -> dict:
@@ -712,6 +714,80 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
     assert "final/video.mp4" in artifacts["files"]
     assert "scorecard.json" in artifacts["files"]
     assert "# Eddy V2 Scorecard" in scorecard
+
+
+def test_review_command_records_scores_but_keeps_audio_blocker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+
+    reviewed = mcp_json(
+        handle(
+            "tools/call",
+            {
+                "name": "eddy_v2_review",
+                "arguments": {
+                    "run_dir": str(result.run_dir),
+                    "long_edit": 8,
+                    "motion": 8,
+                    "audio": 8,
+                    "shorts": 8,
+                    "reviewer": "Lennox",
+                    "notes": "Looks strong but audio proof is still local fallback.",
+                },
+            },
+        )
+    )
+    scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
+    packet = json.loads((result.run_dir / "final" / "review" / "review-packet.json").read_text(encoding="utf-8"))
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+
+    assert reviewed["status"] == "blocked"
+    assert reviewed["publishable_8_of_10"] is False
+    assert "strong_studio_sound_not_proven" in reviewed["blocking_reasons"]
+    assert scorecard["publishable_8_of_10"] is False
+    assert packet["status"] == "reviewed_blocked"
+    assert all(criterion["status"] == "pass" for criterion in packet["criteria"])
+    assert any(row["event"] == "quality_review" and row["status"] == "blocked" for row in rows)
+
+
+def test_review_command_can_mark_publishable_after_strong_studio_sound(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
+    result = edit_folder(folder, target_duration_s=2)
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "eddy_v2.cli",
+            "review",
+            str(result.run_dir),
+            "--long-edit",
+            "8",
+            "--motion",
+            "8",
+            "--audio",
+            "8",
+            "--shorts",
+            "8",
+            "--notes",
+            "Studio Sound parity is proven.",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    reviewed = json.loads(proc.stdout)
+    scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
+
+    assert proc.returncode == 0
+    assert reviewed["status"] == "pass"
+    assert reviewed["publishable_8_of_10"] is True
+    assert reviewed["blocking_reasons"] == []
+    assert scorecard["publishable_8_of_10"] is True
 
 
 def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

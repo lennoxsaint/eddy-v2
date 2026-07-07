@@ -24,6 +24,10 @@ _Avoid_: Draft final, partial export, usable preview
 The single real layered Codex custom-models footage set used to judge whether V2 beats the current Eddy path.
 _Avoid_: Cherry-picked demo, synthetic test, smoke clip
 
+**8/10 Quality Review**:
+The human taste verdict recorded by `eddy review`, with separate scores for long edit story, motion graphics, audio polish, and Shorts watchability.
+_Avoid_: Implicit approval, green render, unrecorded opinion
+
 **Transcript Sidecar**:
 A creator-provided `.vtt`, `.srt`, or `.txt` file placed beside the raw footage so Eddy can make semantic chapter and Shorts-anchor decisions without mutating source media.
 _Avoid_: Hidden transcription job, source edit, unreceipted metadata
@@ -39,6 +43,7 @@ _Avoid_: Generic chapter, fake understanding, unproven editorial beat
 - A **Quarantined Partial** may be cited in receipts, but it must not appear in `final/`.
 - The **Bakeoff Hero Video** is the acceptance target after the full V2 feature floor exists.
 - A **Transcript Sidecar** can produce **Semantic Chapter** entries, but the run remains complete without one only when the fallback is receipted.
+- An **8/10 Quality Review** can only mark a run publishable when every score is 8+ and no machine or audio quality blockers remain.
 
 ## Example Dialogue
 

@@ -10,6 +10,7 @@ from . import __version__
 from .bakeoff import build_bakeoff_report
 from .identities import list_identities
 from .pipeline import edit_folder
+from .quality_review import apply_quality_review
 from .receipts import Receipts
 
 TOOLS = [
@@ -76,6 +77,23 @@ TOOLS = [
                 "intent_json": {"type": "string"},
             },
             "required": ["folder"],
+        },
+    },
+    {
+        "name": "eddy_v2_review",
+        "description": "Record Lennox's 8/10 quality review scores for a completed run.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_dir": {"type": "string"},
+                "long_edit": {"type": "number"},
+                "motion": {"type": "number"},
+                "audio": {"type": "number"},
+                "shorts": {"type": "number"},
+                "reviewer": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+            "required": ["run_dir", "long_edit", "motion", "audio", "shorts"],
         },
     },
 ]
@@ -172,6 +190,20 @@ def _bakeoff_payload(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _review_payload(args: dict[str, Any]) -> dict[str, Any]:
+    return apply_quality_review(
+        Path(args["run_dir"]),
+        {
+            "long_edit_story": float(args["long_edit"]),
+            "motion_graphics": float(args["motion"]),
+            "audio_polish": float(args["audio"]),
+            "shorts_watchability": float(args["shorts"]),
+        },
+        reviewer=str(args.get("reviewer") or "Lennox"),
+        notes=str(args.get("notes") or ""),
+    )
+
+
 def handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
     if method == "tools/list":
         return {"tools": TOOLS}
@@ -190,6 +222,8 @@ def handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
             return _text_content(_scorecard_text(Path(args["run_dir"])))
         if name == "eddy_v2_bakeoff":
             return _json_content(_bakeoff_payload(args))
+        if name == "eddy_v2_review":
+            return _json_content(_review_payload(args))
     raise ValueError(f"unsupported MCP method/tool: {method}")
 
 
