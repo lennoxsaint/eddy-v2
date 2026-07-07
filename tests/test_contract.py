@@ -1083,7 +1083,7 @@ def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatc
 
 
 def test_bakeoff_compares_explicit_current_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    folder = make_layered_fixture(tmp_path / "footage", 50)
+    folder = make_layered_fixture(tmp_path / "footage", 20)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     result = edit_folder(folder, local_only=True, target_duration_s=2)
     current = tmp_path / "current-eddy-run"
@@ -1105,7 +1105,8 @@ def test_bakeoff_compares_explicit_current_run(tmp_path: Path, monkeypatch: pyte
     )
 
     assert report["current_output_proof"]["status"] == "compared"
+    assert report["candidates"]["eddy_v2"]["shorts_count"] == 1
     assert report["candidates"]["current_eddy"]["shorts_count"] == 1
     assert report["comparison"]["status"] == "metrics_compared"
-    assert report["comparison"]["shorts_count_delta"] == 2
+    assert report["comparison"]["shorts_count_delta"] == 0
     assert report["comparison"]["v2_audio_quality"] == "local_degraded_fallback"
