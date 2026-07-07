@@ -42,7 +42,7 @@ def _extract_frame(video: Path, output: Path, at_s: float, receipts: Receipts) -
     )
 
 
-def _extract_clip(video: Path, output: Path, start_s: float, duration_s: float, receipts: Receipts) -> None:
+def _extract_clip(video: Path, output: Path, start_s: float, duration_s: float, receipts: Receipts, *, scale: str) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     run_command(
         [
@@ -54,6 +54,8 @@ def _extract_clip(video: Path, output: Path, start_s: float, duration_s: float, 
             str(video),
             "-t",
             f"{max(0.25, duration_s):.3f}",
+            "-vf",
+            f"scale={scale}",
             "-c:v",
             "libx264",
             "-preset",
@@ -102,12 +104,12 @@ def _concat_clips(clips: list[Path], output: Path, receipts: Receipts) -> Path |
 
 
 def _build_long_review_reel(long_video: Path, duration: float, review_dir: Path, receipts: Receipts) -> Path | None:
-    clip_duration = min(8.0, max(0.5, duration))
+    clip_duration = min(5.0, max(0.5, duration))
     clips: list[Path] = []
     for index, at_s in enumerate(_long_sample_times(duration), start=1):
         start_s = min(max(0.0, at_s - (clip_duration / 2)), max(0.0, duration - clip_duration))
         clip = review_dir / "reels" / f"long-clip-{index:02d}.mp4"
-        _extract_clip(long_video, clip, start_s, clip_duration, receipts)
+        _extract_clip(long_video, clip, start_s, clip_duration, receipts, scale="960:-2")
         clips.append(clip)
     return _concat_clips(clips, review_dir / "reels" / "long-review-reel.mp4", receipts)
 
@@ -116,7 +118,7 @@ def _build_shorts_review_reel(shorts: list[Path], review_dir: Path, receipts: Re
     clips: list[Path] = []
     for index, short in enumerate(shorts, start=1):
         clip = review_dir / "reels" / f"short-{index:02d}-clip.mp4"
-        _extract_clip(short, clip, 0.0, min(20.0, max(0.5, _duration(short))), receipts)
+        _extract_clip(short, clip, 0.0, min(10.0, max(0.5, _duration(short))), receipts, scale="540:960")
         clips.append(clip)
     return _concat_clips(clips, review_dir / "reels" / "shorts-review-reel.mp4", receipts)
 
