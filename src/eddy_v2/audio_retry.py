@@ -10,7 +10,7 @@ from .audio import polish_extracted_audio
 from .commands import duration_s, ffprobe_json, run_command
 from .cost import CostTracker
 from .policy import RunPolicy
-from .proof import audio_gate_blockers, read_json_object, write_audio_proof
+from .proof import audio_gate_blockers, read_json_object, refresh_scorecard_proof_layers, write_audio_proof
 from .qa import validate_long_video
 from .receipts import Receipts
 from .sources import sha256_file
@@ -164,6 +164,7 @@ def retry_audio_proof(run_dir: Path, *, local_only: bool = False, cloud_budget_u
     _refresh_json_audio(run_dir / "scorecard.json", audio_proof_path, proof, cost_summary)
     _refresh_json_audio(run_dir / "final" / "launch-kit" / "launch-kit.json", audio_proof_path, proof, cost_summary)
     _refresh_json_audio(run_dir / "final" / "review" / "review-packet.json", audio_proof_path, proof, cost_summary)
+    refresh_scorecard_proof_layers(run_dir, cost_summary=cost_summary, receipts=receipts)
     refreshed_scorecard = read_json_object(run_dir / "scorecard.json") or {}
     refreshed_blockers = refreshed_scorecard.get("blockers")
     blocker_text = ", ".join(str(blocker) for blocker in refreshed_blockers) if isinstance(refreshed_blockers, list) and refreshed_blockers else "none"

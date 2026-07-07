@@ -32,6 +32,10 @@ _Avoid_: Implicit approval, green render, unrecorded opinion
 The `eddy audio-proof <run>` path that reuses an existing run's extracted WAV, rechecks source hashes, retries configured cloud audio providers, and remuxes the final long video only after parity passes.
 _Avoid_: Full re-edit, source upload, proof-only audio that is not in the final video
 
+**Proof Layers**:
+The machine-readable split in `scorecard.json` and `bakeoff.json` that keeps hero-run media proof, Shorts yield proof, cloud/cost proof, human review, and final publishability separate.
+_Avoid_: One green badge, vague completion, hidden blocker
+
 **Transcript Sidecar**:
 A creator-provided `.vtt`, `.srt`, or `.txt` file placed beside the raw footage so Eddy can make semantic chapter and Shorts-anchor decisions without mutating source media.
 _Avoid_: Hidden transcription job, source edit, unreceipted metadata
@@ -49,6 +53,7 @@ _Avoid_: Generic chapter, fake understanding, unproven editorial beat
 - A **Transcript Sidecar** can produce **Semantic Chapter** entries, but the run remains complete without one only when the fallback is receipted.
 - An **8/10 Quality Review** can only mark a run publishable when every score is 8+ and no machine or audio quality blockers remain.
 - An **Audio Proof Retry** may remove the Studio Sound blocker for an existing run, but only after the remuxed long video re-passes media integrity.
+- **Proof Layers** are refreshed after edits, audio retries, and human reviews so a run can show green media proof while final publishability stays blocked.
 
 ## Example Dialogue
 

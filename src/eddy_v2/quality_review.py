@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .proof import read_json_object
+from .proof import read_json_object, refresh_scorecard_proof_layers
 from .receipts import Receipts
 
 CRITERIA = {
@@ -117,6 +117,7 @@ def apply_quality_review(
     scorecard["quality_review"] = review
     scorecard_path.write_text(json.dumps(scorecard, indent=2), encoding="utf-8")
     _update_scorecard_md(run_dir / "scorecard.md", review)
+    refresh_scorecard_proof_layers(run_dir)
 
     Receipts(run_dir / "receipts.jsonl").log(
         "quality_review",

@@ -11,7 +11,7 @@ from .cost import CostTracker
 from .models import create_intent
 from .plan import create_edit_plan
 from .policy import RunPolicy
-from .proof import audio_gate_blockers, read_json_object, write_audio_proof
+from .proof import audio_gate_blockers, build_proof_layers, proof_layers_markdown, read_json_object, refresh_scorecard_proof_layers, write_audio_proof
 from .qa import validate_cut_integrity, validate_launch_package
 from .receipts import Receipts
 from .render import render_long, render_shorts
@@ -120,6 +120,7 @@ def edit_folder(
         else:
             receipts.log("gate", name="source_safety", status="pass", source_hashes=after)
         receipts.log("run_finish", status="blocked" if blockers else "complete", blockers=blockers, **cost.summary())
+        refresh_scorecard_proof_layers(run_dir, blockers=blockers, cost_summary=cost.summary(), receipts=receipts)
     return RunResult(run_dir=run_dir, status="blocked" if blockers else "complete", blockers=blockers)
 
 
@@ -179,6 +180,8 @@ def write_scorecard(
         "audio_proof_path": str(audio_proof) if audio_proof else None,
         "audio_proof": audio_summary,
     }
+    proof_layers = build_proof_layers(run_dir, scorecard=score)
+    score["proof_layers"] = proof_layers
     (run_dir / "scorecard.json").write_text(json.dumps(score, indent=2), encoding="utf-8")
     (run_dir / "scorecard.md").write_text(
         "\n".join(
@@ -193,6 +196,8 @@ def write_scorecard(
                 f"- review_packet: {score['review_packet'] or 'none'}",
                 f"- blockers: {', '.join(blockers) if blockers else 'none'}",
                 "- publishable_8_of_10: false pending Lennox review",
+                "",
+                proof_layers_markdown(proof_layers),
                 "",
             ]
         ),

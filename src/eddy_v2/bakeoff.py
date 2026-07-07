@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .commands import ffprobe_json
-from .proof import read_json_object
+from .proof import build_proof_layers, read_json_object
 from .receipts import Receipts
 
 
@@ -132,6 +132,7 @@ def summarize_run(run_dir: Path, *, label: str) -> dict[str, Any]:
     audio_proof = read_json_object(run_dir / "final" / "audio-proof.json")
     blockers_raw = scorecard.get("blockers")
     blockers = blockers_raw if isinstance(blockers_raw, list) else []
+    proof_layers = build_proof_layers(run_dir, scorecard=scorecard, rows=rows)
     return {
         "label": label,
         "run_dir": str(run_dir),
@@ -149,6 +150,7 @@ def summarize_run(run_dir: Path, *, label: str) -> dict[str, Any]:
             "cap_usd": cost.get("cap_usd"),
         },
         "audio_proof": audio_proof,
+        "proof_layers": proof_layers,
         "source_hash_intact": _source_hash_intact(rows),
         "blockers": blockers,
     }
@@ -214,6 +216,7 @@ def build_bakeoff_report(
         current = current_output_proof
 
     comparison = _comparison(v2, current)
+    completion_audit = _completion_audit(v2)
     report = {
         "hero_folder": str(folder.resolve()),
         "winner": "undecided_pending_lennox_8_of_10_review",
@@ -221,10 +224,43 @@ def build_bakeoff_report(
         "current_output_proof": current_output_proof,
         "candidates": {"eddy_v2": v2, "current_eddy": current},
         "comparison": comparison,
+        "completion_audit": completion_audit,
     }
     (v2_run_dir / "bakeoff.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (v2_run_dir / "bakeoff.md").write_text(_markdown(report), encoding="utf-8")
     return report
+
+
+def _completion_audit(v2: dict[str, Any]) -> dict[str, Any]:
+    proof_layers_raw = v2.get("proof_layers")
+    proof_layers = proof_layers_raw if isinstance(proof_layers_raw, dict) else {}
+    final_raw = proof_layers.get("final_publishability")
+    final = final_raw if isinstance(final_raw, dict) else {}
+    remaining_raw = final.get("blockers", v2.get("blockers", []))
+    remaining = [str(blocker) for blocker in remaining_raw] if isinstance(remaining_raw, list) else []
+    return {
+        "repo_setup_proof": {
+            "status": "requires_external_verification",
+            "evidence_command": "python scripts/contract_audit.py",
+            "covers": ["MIT", "permissive deps", "CLI", "MCP", "skill", "docs", "no publish/upload/scheduling code"],
+        },
+        "test_proof": {
+            "status": "requires_external_verification",
+            "evidence_commands": [
+                "ruff check src tests scripts/contract_audit.py",
+                "mypy src/eddy_v2",
+                "pytest -q --cov=eddy_v2 --cov-report=term-missing",
+                "python scripts/contract_audit.py",
+                "python scripts/public_scrub_check.py",
+                "git diff --check",
+            ],
+        },
+        "hero_run_proof": proof_layers.get("hero_run_proof", {"status": "missing"}),
+        "shorts_proof": proof_layers.get("shorts_proof", {"status": "missing"}),
+        "cloud_cost_proof": proof_layers.get("cloud_cost_proof", {"status": "missing"}),
+        "human_review_proof": proof_layers.get("human_review_proof", {"status": "missing"}),
+        "remaining_blockers": remaining,
+    }
 
 
 def _comparison(v2: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
@@ -257,6 +293,11 @@ def _markdown(report: dict[str, Any]) -> str:
     v2 = report["candidates"]["eddy_v2"]
     current = report["candidates"]["current_eddy"]
     comparison = report["comparison"]
+    completion = report["completion_audit"]
+    hero = completion["hero_run_proof"]
+    shorts = completion["shorts_proof"]
+    cloud = completion["cloud_cost_proof"]
+    human = completion["human_review_proof"]
     lines = [
         "# Eddy V2 Bakeoff",
         "",
@@ -308,5 +349,20 @@ def _markdown(report: dict[str, Any]) -> str:
     if comparison.get("notes"):
         lines.extend(f"- note: {note}" for note in comparison["notes"])
     lines.append("- human_quality_review: pending_lennox_8_of_10_review")
+    lines.extend(
+        [
+            "",
+            "## Completion Audit",
+            "",
+            f"- repo_setup_proof: {completion['repo_setup_proof']['status']}",
+            f"- test_proof: {completion['test_proof']['status']}",
+            f"- hero_run_proof: {hero.get('status', 'missing')}",
+            f"- shorts_proof: {shorts.get('status', 'missing')} ({shorts.get('shorts_count', 0)}/{shorts.get('required_shorts', 3)})",
+            f"- cloud_cost_proof: {cloud.get('status', 'missing')}",
+            f"- audio_quality: {cloud.get('audio_quality', 'missing')}",
+            f"- human_review_proof: {human.get('status', 'missing')}",
+            f"- remaining_blockers: {', '.join(completion['remaining_blockers']) if completion['remaining_blockers'] else 'none'}",
+        ]
+    )
     lines.append("")
     return "\n".join(lines)

@@ -227,6 +227,8 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     result = edit_folder(folder, local_only=True, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
+    scorecard_md = (result.run_dir / "scorecard.md").read_text(encoding="utf-8")
     gates = {row["name"] for row in rows if row["event"] == "gate" and row["status"] == "pass"}
     assert result.status == "blocked"
     assert {
@@ -244,6 +246,10 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert any(row["event"] == "gate" and row["name"] == "audio_quality" and row["status"] == "failed" for row in rows)
     assert any(row["event"] == "motion_composite" and row["surface"] == "long" for row in rows)
     assert any(row["event"] == "motion_composite" and row["surface"] == "shorts" for row in rows)
+    assert scorecard["proof_layers"]["hero_run_proof"]["status"] == "pass"
+    assert scorecard["proof_layers"]["cloud_cost_proof"]["status"] == "blocked"
+    assert "pending_lennox_8_of_10_review" in scorecard["proof_layers"]["final_publishability"]["blockers"]
+    assert "<!-- proof-layers:start -->" in scorecard_md
 
 
 def test_review_packet_is_written_for_completed_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -818,6 +824,8 @@ def test_review_command_records_scores_but_keeps_audio_blocker(tmp_path: Path, m
     assert scorecard["publishable_8_of_10"] is False
     assert packet["status"] == "reviewed_blocked"
     assert all(criterion["status"] == "pass" for criterion in packet["criteria"])
+    assert scorecard["proof_layers"]["human_review_proof"]["status"] == "blocked"
+    assert "strong_studio_sound_not_proven" in scorecard["proof_layers"]["final_publishability"]["blockers"]
     assert any(row["event"] == "quality_review" and row["status"] == "blocked" for row in rows)
 
 
@@ -858,6 +866,8 @@ def test_review_command_can_mark_publishable_after_strong_studio_sound(tmp_path:
     assert reviewed["publishable_8_of_10"] is True
     assert reviewed["blocking_reasons"] == []
     assert scorecard["publishable_8_of_10"] is True
+    assert scorecard["proof_layers"]["human_review_proof"]["status"] == "pass"
+    assert scorecard["proof_layers"]["final_publishability"]["status"] == "publishable"
 
 
 def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -883,6 +893,10 @@ def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, mo
     assert Path(result["bakeoff"]).exists()
     report = json.loads(Path(result["bakeoff_json"]).read_text(encoding="utf-8"))
     assert report["candidates"]["eddy_v2"]["audio_proof"]["quality_status"] == "local_degraded_fallback"
+    assert report["completion_audit"]["repo_setup_proof"]["status"] == "requires_external_verification"
+    assert report["completion_audit"]["hero_run_proof"]["status"] == "pass"
+    assert report["completion_audit"]["cloud_cost_proof"]["status"] == "blocked"
+    assert "pending_lennox_8_of_10_review" in report["completion_audit"]["remaining_blockers"]
 
 
 def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -946,6 +960,9 @@ def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_pat
     assert scorecard["status"] == "complete"
     assert scorecard["blockers"] == []
     assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
+    assert scorecard["proof_layers"]["cloud_cost_proof"]["status"] == "pass"
+    assert scorecard["proof_layers"]["final_publishability"]["status"] == "blocked"
+    assert "pending_lennox_8_of_10_review" in scorecard["proof_layers"]["final_publishability"]["blockers"]
     assert launch_kit["audio_proof"]["quality_status"] == "strong_studio_sound"
     assert packet["audio_proof"]["quality_status"] == "strong_studio_sound"
     assert "- audio_quality: strong_studio_sound" in (result.run_dir / "final" / "review" / "README.md").read_text(encoding="utf-8")
@@ -968,6 +985,7 @@ def test_audio_proof_retry_local_only_refuses_cloud_without_fake_upload(tmp_path
     scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert scorecard["status"] == "blocked"
     assert "cloud_audio_credentials_missing_or_failed" in scorecard["blockers"]
+    assert scorecard["proof_layers"]["cloud_cost_proof"]["status"] == "blocked"
     assert any(row["event"] == "cloud_refused" and row["surface"] == "descript" for row in rows)
     assert not any(row["event"] == "descript_import" for row in rows)
     assert not any(row["event"] == "audio_retry_remux" and row["status"] == "pass" for row in rows)
