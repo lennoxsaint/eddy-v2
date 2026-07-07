@@ -268,6 +268,13 @@ def test_command_receipts_tolerate_broken_utf8_tail(tmp_path: Path):
     assert "\ufffd" in finish["stderr_tail"]
 
 
+def test_render_filters_do_not_screen_blend_motion():
+    render_source = (Path(__file__).resolve().parents[1] / "src" / "eddy_v2" / "render.py").read_text(encoding="utf-8")
+    assert "blend=all_mode=screen" not in render_source
+    assert "screen_blend" not in render_source
+    assert "keyed_alpha_overlay" in render_source
+
+
 def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     folder = make_layered_fixture(tmp_path / "footage", 16)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
@@ -291,8 +298,10 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
         "final_media_probe",
     } <= gates
     assert any(row["event"] == "gate" and row["name"] == "audio_quality" and row["status"] == "failed" for row in rows)
-    assert any(row["event"] == "motion_composite" and row["surface"] == "long" for row in rows)
-    assert any(row["event"] == "motion_composite" and row["surface"] == "shorts" for row in rows)
+    motion_rows = [row for row in rows if row["event"] == "motion_composite"]
+    assert any(row["surface"] == "long" and row["mode"] == "keyed_alpha_overlay" for row in motion_rows)
+    assert any(row["surface"] == "shorts" and row["mode"] == "keyed_alpha_overlay" for row in motion_rows)
+    assert all(row["mode"] != "screen_blend" for row in motion_rows)
     assert scorecard["proof_layers"]["hero_run_proof"]["status"] == "pass"
     assert scorecard["proof_layers"]["hero_run_proof"]["review_reels"]["long_exists"] is True
     assert scorecard["proof_layers"]["hero_run_proof"]["review_reels"]["shorts_exists"] is True
@@ -405,7 +414,8 @@ def test_motion_project_has_dense_plan_and_visual_qa(tmp_path: Path, monkeypatch
     assert plan["scene_count"] == 3
     assert plan["transition_count"] == 2
     assert plan["sparse_overlay_count"] == 0
-    assert plan["composite_mode"] == "screen_blend"
+    assert plan["composite_mode"] == "keyed_alpha_overlay"
+    assert "background: #000000" in html
     assert html.count('class="scene"') == 3
     assert "window.__timelines[\"eddy-v2\"]" in html
     assert (project / "storyboard.md").exists()

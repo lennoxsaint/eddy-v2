@@ -389,7 +389,7 @@ def create_motion_project(
         "scene_count": len(scenes),
         "transition_count": len(scenes) - 1,
         "sparse_overlay_count": len(beats),
-        "composite_mode": "screen_blend",
+        "composite_mode": "keyed_alpha_overlay",
         "scenes": scenes,
         "sparse_overlays": beats,
     }
@@ -433,10 +433,10 @@ def create_motion_project(
   <meta charset="utf-8" />
   <style>
     {font_import}@import url("./identity.css");
-    body {{ margin: 0; background: {"var(--ground, #07111f)" if portrait else "#000000"}; font-family: var(--mono); }}
+    body {{ margin: 0; background: #000000; font-family: var(--mono); }}
     #stage {{
       width: {width}px; height: {height}px; position: relative; overflow: hidden;
-      color: var(--text, #ffffff); background: {"var(--ground, #07111f)" if portrait else "#000000"};
+      color: var(--text, #ffffff); background: #000000;
       font-family: var(--mono);
     }}
     .grain {{

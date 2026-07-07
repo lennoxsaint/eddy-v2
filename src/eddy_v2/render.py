@@ -16,9 +16,28 @@ from .qa import validate_caption_sidecars, validate_long_video, validate_motion_
 from .receipts import Receipts
 from .sources import Sources
 
+MOTION_COMPOSITE_MODE = "keyed_alpha_overlay"
+SEGMENT_VIDEO_PRESET = "fast"
+SEGMENT_VIDEO_CRF = "17"
+LONG_VIDEO_PRESET = "medium"
+LONG_VIDEO_CRF = "16"
+SHORT_VIDEO_PRESET = "medium"
+SHORT_VIDEO_CRF = "17"
+
 
 def _concat_list_line(path: Path) -> str:
     return "file '" + str(path).replace("'", "'\\''") + "'"
+
+
+def _keyed_motion_overlay_filter(base_label: str, motion_input_index: int, width: int, height: int, tail_filters: str) -> str:
+    motion = (
+        f"[{motion_input_index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},format=rgba,colorkey=0x000000:0.08:0.12,colorchannelmixer=aa=0.92[ov];"
+    )
+    overlay = f"{base_label}[ov]overlay=shortest=1:format=auto"
+    if tail_filters:
+        return f"{motion}{overlay},{tail_filters}[v]"
+    return f"{motion}{overlay}[v]"
 
 
 def _render_long_visual_segments(sources: Sources, run_dir: Path, receipts: Receipts, plan: EditPlan) -> Path:
@@ -59,9 +78,9 @@ def _render_long_visual_segments(sources: Sources, run_dir: Path, receipts: Rece
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                SEGMENT_VIDEO_PRESET,
                 "-crf",
-                "20",
+                SEGMENT_VIDEO_CRF,
                 "-pix_fmt",
                 "yuv420p",
                 str(segment_output),
@@ -84,9 +103,9 @@ def _render_long_visual_segments(sources: Sources, run_dir: Path, receipts: Rece
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                SEGMENT_VIDEO_PRESET,
                 "-crf",
-                "20",
+                SEGMENT_VIDEO_CRF,
                 "-pix_fmt",
                 "yuv420p",
                 str(segment_output),
@@ -240,10 +259,7 @@ def render_long(
             "-i",
             str(motion_output),
             "-filter_complex",
-            (
-                "[2:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080[ov];"
-                f"[0:v][ov]blend=all_mode=screen:shortest=1,{long_caption_filters}[v]"
-            ),
+            _keyed_motion_overlay_filter("[0:v]", 2, 1920, 1080, long_caption_filters),
             "-map",
             "[v]",
             "-map",
@@ -253,9 +269,9 @@ def render_long(
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            LONG_VIDEO_PRESET,
             "-crf",
-            "20",
+            LONG_VIDEO_CRF,
             "-c:a",
             "aac",
             "-shortest",
@@ -267,8 +283,7 @@ def render_long(
             "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[base];"
             "[0:v]scale=420:-1[cam];"
             "[base][cam]overlay=40:40[pip];"
-            "[3:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080[ov];"
-            f"[pip][ov]blend=all_mode=screen:shortest=1,{long_caption_filters}[v]"
+            + _keyed_motion_overlay_filter("[pip]", 3, 1920, 1080, long_caption_filters)
         )
         args = [
             "ffmpeg",
@@ -306,9 +321,9 @@ def render_long(
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            LONG_VIDEO_PRESET,
             "-crf",
-            "20",
+            LONG_VIDEO_CRF,
             "-c:a",
             "aac",
             "-shortest",
@@ -338,8 +353,7 @@ def render_long(
             (
                 "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,"
                 "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[base];"
-                "[2:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080[ov];"
-                f"[base][ov]blend=all_mode=screen:shortest=1,{long_caption_filters}[v]"
+                + _keyed_motion_overlay_filter("[base]", 2, 1920, 1080, long_caption_filters)
             ),
             "-map",
             "[v]",
@@ -350,15 +364,15 @@ def render_long(
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            LONG_VIDEO_PRESET,
             "-crf",
-            "20",
+            LONG_VIDEO_CRF,
             "-c:a",
             "aac",
             "-shortest",
             str(output),
         ]
-    receipts.log("motion_composite", status="pass", surface="long", mode="screen_blend", motion=str(motion_output))
+    receipts.log("motion_composite", status="pass", surface="long", mode=MOTION_COMPOSITE_MODE, motion=str(motion_output))
     run_command(args, receipts, event="ffmpeg", timeout_s=7200)
     probe = ffprobe_json(output)
     (final_dir / "video.ffprobe.json").write_text(json.dumps(probe, indent=2), encoding="utf-8")
@@ -399,8 +413,7 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 "[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[cam];"
                 "[1:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:black[screen];"
                 "[cam][screen]vstack=inputs=2[stack];"
-                "[2:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[ov];"
-                f"[stack][ov]blend=all_mode=screen:shortest=1,{short_caption_filters}[v]"
+                + _keyed_motion_overlay_filter("[stack]", 2, 1080, 1920, short_caption_filters)
             )
             args = [
                 "ffmpeg",
@@ -430,9 +443,9 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                SHORT_VIDEO_PRESET,
                 "-crf",
-                "22",
+                SHORT_VIDEO_CRF,
                 "-c:a",
                 "aac",
                 "-shortest",
@@ -453,8 +466,7 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 "-filter_complex",
                 (
                     "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[base];"
-                    "[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[ov];"
-                    f"[base][ov]blend=all_mode=screen:shortest=1,{short_caption_filters}[v]"
+                    + _keyed_motion_overlay_filter("[base]", 1, 1080, 1920, short_caption_filters)
                 ),
                 "-map",
                 "[v]",
@@ -465,16 +477,16 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                SHORT_VIDEO_PRESET,
                 "-crf",
-                "22",
+                SHORT_VIDEO_CRF,
                 "-c:a",
                 "aac",
                 "-shortest",
                 str(out),
             ]
         try:
-            receipts.log("motion_composite", status="pass", surface="shorts", index=index, mode="screen_blend", motion=str(motion_output))
+            receipts.log("motion_composite", status="pass", surface="shorts", index=index, mode=MOTION_COMPOSITE_MODE, motion=str(motion_output))
             run_command(args, receipts, event="ffmpeg", timeout_s=1800)
             if validate_short_video(run_dir, out, receipts, index=index):
                 receipts.log("short_rendered", index=index, status="pass", output=str(out))
