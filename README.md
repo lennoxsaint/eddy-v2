@@ -54,7 +54,11 @@ Read commands and proof retry commands accept `--json` for explicit machine-read
 
 `--local-only` refuses OpenRouter, Descript, Auphonic, ElevenLabs, cloud render, and image/model uploads. Cloud quality mode is otherwise allowed by default when credentials are configured and cost-capped.
 
-Run `python scripts/contract_audit.py` before public handoff. It checks the repo-scope contract: MIT license, no runtime dependencies, permissive build/dev dependencies, required CLI and MCP surfaces, the Node/HyperFrames renderer boundary, the six frozen identities, required docs/ADRs/skill files, and absence of social/video publishing integrations.
+Run `python scripts/contract_audit.py` before public handoff. It checks the repo-scope contract: MIT license, no runtime dependencies, permissive build/dev dependencies, required CLI and MCP surfaces, the Node/HyperFrames renderer boundary, the six frozen identities, required docs/ADRs/skill files, V2 agent/playbook guidance, and absence of social/video publishing integrations.
+
+Agents should read `AGENTS.md` and `EDDY-PLAYBOOK.md` before driving a real edit. Those files are V2-specific:
+the old `lennoxsaint/eddy` repo is read-only comparison context, while this repo owns the autonomous
+OpenRouter editor+critic loop, HyperFrames identity pack, Studio Sound retry path, and proof-layer closeout.
 
 ## MCP
 

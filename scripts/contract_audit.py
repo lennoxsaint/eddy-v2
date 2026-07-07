@@ -44,6 +44,8 @@ REQUIRED_MCP = {
 }
 
 REQUIRED_DOCS = [
+    ROOT / "AGENTS.md",
+    ROOT / "EDDY-PLAYBOOK.md",
     ROOT / "README.md",
     ROOT / "CONTEXT.md",
     ROOT / "package.json",
@@ -63,6 +65,26 @@ REQUIRED_CONTEXT_TERMS = [
     "Cloud Quality Profile",
     "Quarantined Partial",
     "Bakeoff Hero Video",
+]
+
+REQUIRED_AGENT_TERMS = [
+    "lennoxsaint/eddy-v2",
+    "Use `/Users/lennoxsaint/eddy` only as a read-only reference",
+    "Cloud quality APIs are allowed only when configured, fully receipted, and cost-capped",
+    "Do not claim a run is publishable until machine gates pass",
+    "HyperFrames is the default renderer",
+    "Studio Sound",
+    "proof layers",
+]
+
+REQUIRED_PLAYBOOK_TERMS = [
+    "raw folder in -> proof-gated long YouTube edit + quality-gated Shorts + launch kit out",
+    "eddy_v2_edit_start",
+    "Frozen identity systems",
+    "Shorts are not filler",
+    "Strong Studio Sound passes only when provider export parity is proven",
+    "The Bakeoff Hero Video is the Codex custom-models footage",
+    "Blocked with receipts",
 ]
 
 REQUIRED_SKILL_TERMS = [
@@ -225,6 +247,18 @@ def _credential_helper_surface_present() -> bool:
     return all(path.exists() for path in expected) and all(term in text for term in required_terms)
 
 
+def _agent_docs_surface_present() -> bool:
+    agents = ROOT / "AGENTS.md"
+    playbook = ROOT / "EDDY-PLAYBOOK.md"
+    if not agents.exists() or not playbook.exists():
+        return False
+    agents_text = agents.read_text(encoding="utf-8")
+    playbook_text = playbook.read_text(encoding="utf-8")
+    return all(term in agents_text for term in REQUIRED_AGENT_TERMS) and all(
+        term in playbook_text for term in REQUIRED_PLAYBOOK_TERMS
+    )
+
+
 def main() -> int:
     project = _project()
     runtime_deps = [_name(dep) for dep in project.get("project", {}).get("dependencies", [])]
@@ -254,6 +288,7 @@ def main() -> int:
         "mcp_initialize_lifecycle": _mcp_initialize_ok(),
         "frozen_identity_pack": identity_slugs == REQUIRED_IDENTITIES,
         "required_docs_present": all(path.exists() for path in REQUIRED_DOCS),
+        "required_agent_playbook_surface": _agent_docs_surface_present(),
         "codex_claude_skill_surface": all(term in skill for term in REQUIRED_SKILL_TERMS),
         "node_hyperframes_renderer_boundary": (ROOT / "renderer" / "hyperframes-runner.mjs").exists()
         and (ROOT / "package.json").exists()
@@ -286,6 +321,7 @@ def main() -> int:
             "node_renderer": "renderer/hyperframes-runner.mjs",
             "threadify_fc_assets": sorted(threadify_fc_assets),
             "forbidden_publication_findings": forbidden_publication,
+            "agent_docs": ["AGENTS.md", "EDDY-PLAYBOOK.md"],
         },
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
