@@ -43,17 +43,24 @@ def validate_cut_integrity(
     gate = "cut_integrity"
     reasons: list[str] = []
     source_duration = plan.source_duration_s
-    long_start = plan.long_segment.start_s
-    long_duration = plan.long_segment.duration_s
-    long_end = long_start + long_duration
+    long_segments = plan.source_segments()
     if source_duration <= 0:
         reasons.append("source_duration_invalid")
-    if long_start < 0:
-        reasons.append("long_segment_negative_start")
-    if long_duration <= 0:
-        reasons.append("long_segment_nonpositive_duration")
-    if long_end > source_duration + 0.75:
-        reasons.append("long_segment_exceeds_source")
+    prior_end = -1.0
+    for index, segment in enumerate(long_segments):
+        prefix = "long_segment" if len(long_segments) == 1 else f"long_segment_{index + 1:02d}"
+        long_start = segment.start_s
+        long_duration = segment.duration_s
+        long_end = segment.end_s
+        if long_start < 0:
+            reasons.append(f"{prefix}_negative_start")
+        if long_duration <= 0:
+            reasons.append(f"{prefix}_nonpositive_duration")
+        if long_end > source_duration + 0.75:
+            reasons.append(f"{prefix}_exceeds_source")
+        if long_start < prior_end - 0.001:
+            reasons.append("long_segments_overlap_or_out_of_order")
+        prior_end = max(prior_end, long_end)
     for index, start in enumerate(plan.short_starts_s):
         if start < 0:
             reasons.append(f"short_{index + 1:02d}_negative_start")
@@ -71,6 +78,8 @@ def validate_cut_integrity(
     payload = {
         "source_duration_s": round(source_duration, 3),
         "long_segment": plan.long_segment.as_dict(),
+        "long_segments": [segment.as_dict() for segment in long_segments],
+        "long_duration_s": round(plan.long_duration_s, 3),
         "short_starts_s": [round(start, 3) for start in plan.short_starts_s],
         "short_count": len(plan.short_starts_s),
     }

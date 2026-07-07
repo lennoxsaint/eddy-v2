@@ -547,23 +547,52 @@ def polish_audio(
     *,
     start_s: float = 0.0,
     duration_s: float | None = None,
+    segments: list[tuple[float, float]] | None = None,
 ) -> Path:
     audio_dir = run_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     extracted = audio_dir / "source-audio.wav"
-    extract_args = ["ffmpeg", "-y"]
-    if start_s > 0:
-        extract_args.extend(["-ss", f"{start_s:.3f}"])
-    if duration_s is not None:
-        extract_args.extend(["-t", f"{duration_s:.3f}"])
-    extract_args.extend(["-i", str(sources.mic or sources.camera), "-vn", "-ac", "1", "-ar", "48000", str(extracted)])
-    receipts.log(
-        "audio_extract",
-        source=str(sources.mic or sources.camera),
-        start_s=round(start_s, 3),
-        duration_s=round(duration_s, 3) if duration_s is not None else None,
-        uploaded_media="audio_extract_only",
-    )
+    source = sources.mic or sources.camera
+    if segments and len(segments) > 1:
+        extract_args = ["ffmpeg", "-y"]
+        for segment_start, segment_duration in segments:
+            extract_args.extend(["-ss", f"{segment_start:.3f}", "-t", f"{segment_duration:.3f}", "-i", str(source)])
+        concat_inputs = "".join(f"[{index}:a]" for index in range(len(segments)))
+        extract_args.extend(
+            [
+                "-filter_complex",
+                f"{concat_inputs}concat=n={len(segments)}:v=0:a=1[a]",
+                "-map",
+                "[a]",
+                "-ac",
+                "1",
+                "-ar",
+                "48000",
+                str(extracted),
+            ]
+        )
+        receipts.log(
+            "audio_extract",
+            source=str(source),
+            mode="segments",
+            segments=[{"start_s": round(start, 3), "duration_s": round(duration, 3)} for start, duration in segments],
+            duration_s=round(sum(duration for _, duration in segments), 3),
+            uploaded_media="audio_extract_only",
+        )
+    else:
+        extract_args = ["ffmpeg", "-y"]
+        if start_s > 0:
+            extract_args.extend(["-ss", f"{start_s:.3f}"])
+        if duration_s is not None:
+            extract_args.extend(["-t", f"{duration_s:.3f}"])
+        extract_args.extend(["-i", str(source), "-vn", "-ac", "1", "-ar", "48000", str(extracted)])
+        receipts.log(
+            "audio_extract",
+            source=str(source),
+            start_s=round(start_s, 3),
+            duration_s=round(duration_s, 3) if duration_s is not None else None,
+            uploaded_media="audio_extract_only",
+        )
     run_command(
         extract_args,
         receipts,

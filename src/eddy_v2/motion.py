@@ -88,10 +88,10 @@ def content_beats_from_plan(plan: EditPlan | None, duration_s: float, *, portrai
     beats: list[MotionBeat] = []
     segment_start = plan.long_segment.start_s
     for chapter in plan.semantic_chapters or []:
-        chapter_s = _chapter_seconds(chapter.get("time"))
+        chapter_s = float(chapter["timeline_s"]) if isinstance(chapter.get("timeline_s"), (int, float)) else _chapter_seconds(chapter.get("time"))
         if chapter_s is None:
             continue
-        relative = chapter_s - segment_start
+        relative = chapter_s if "timeline_s" in chapter else chapter_s - segment_start
         if 60.0 <= relative <= duration_s - 6.0:
             _append_beat(beats, start_s=relative, title=str(chapter.get("title") or "Transcript beat"), source="transcript")
         if len(beats) == 4:

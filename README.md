@@ -67,6 +67,10 @@ Host agents can bypass OpenRouter by supplying a reviewed intent through `--inte
 
 If the footage folder, its project parent, or a known `edit/descript-export/` sibling contains `transcript.vtt`, `transcript.srt`, `transcript.md`, `transcript.txt`, `captions.vtt`, `captions.srt`, or `captions.md`, Eddy parses it into `transcript-cues.json`, derives semantic launch-kit chapters, and prefers transcript-backed Shorts anchors. Markdown transcripts may be plain paragraphs or Descript-style `[00:01:00]` marked exports. Source media still stays read-only. If no transcript sidecar exists, Eddy records `transcript_source_missing`, uses audio-density planning, and marks launch-kit chapters as fallback.
 
+## Edit Decision Sidecars
+
+If the footage folder, its project parent, or a known `edit/` sibling contains `edit-decisions.json`, Eddy treats its ordered `segments` as a deterministic story assembly. Each segment needs `start` and `end` source seconds, with an optional `id`. Eddy truncates the segment list to the target long-video duration, renders those source intervals gaplessly, extracts only those audio intervals for polish, maps launch-kit chapters onto the edited timeline, and receipts the decision with `edit_decision_sidecar`, `long_segment_render`, and `long_segment_concat` rows. If no valid sidecar exists, Eddy falls back to silence-detected planning.
+
 Long-form `captions.json`, `subtitles.srt`, and `subtitles.vtt` are timed editorial callouts unless `final/caption-provenance.json` proves otherwise. V2 writes that provenance file on every new render and marks `speech_accurate_subtitles_not_proven` when the sidecars are useful motion/caption overlays rather than verbatim speech subtitles. This is a quality warning for review and bakeoff scoring, not a source-safety failure.
 
 ## Audio Quality

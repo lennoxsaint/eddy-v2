@@ -48,6 +48,10 @@ _Avoid_: Hidden transcription job, source edit, unreceipted metadata
 A launch-kit chapter derived from transcript language and backed by a `transcript` receipt, with a fallback marker when no transcript sidecar exists.
 _Avoid_: Generic chapter, fake understanding, unproven editorial beat
 
+**Edit Decision Sidecar**:
+A creator- or prior-agent-provided `edit-decisions.json` file with ordered source `segments` that Eddy can assemble gaplessly while keeping source media read-only.
+_Avoid_: Mutating raw media, hidden timeline edits, pretending silence detection is story editing
+
 **Caption Provenance**:
 The proof file that says whether timed caption sidecars are speech-accurate subtitles or editorial callouts used for motion overlays.
 _Avoid_: Assuming `.srt` means verbatim, hidden transcription claim, unlabelled captions
@@ -60,6 +64,7 @@ _Avoid_: Assuming `.srt` means verbatim, hidden transcription claim, unlabelled 
 - A **Quarantined Partial** may be cited in receipts, but it must not appear in `final/`.
 - The **Bakeoff Hero Video** is the acceptance target after the full V2 feature floor exists.
 - A **Transcript Sidecar** can produce **Semantic Chapter** entries, but the run remains complete without one only when the fallback is receipted.
+- An **Edit Decision Sidecar** can upgrade silence trimming into deterministic story assembly; Eddy must still receipt each chosen source interval and hash sources before/after.
 - **Caption Provenance** may warn that sidecars are editorial callouts even when a **Transcript Sidecar** exists, because transcript-backed planning is separate from speech-accurate subtitle generation.
 - An **8/10 Quality Review** can only mark a run publishable when every score is 8+ and no machine or audio quality blockers remain.
 - An **Audio Proof Retry** may remove the Studio Sound blocker for an existing run, but only after the remuxed long video re-passes media integrity.

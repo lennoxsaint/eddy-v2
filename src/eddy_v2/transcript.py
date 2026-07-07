@@ -97,6 +97,13 @@ def _parse_plain_transcript(text: str) -> list[TranscriptCue]:
     return cues
 
 
+def parse_transcript_text(path: Path) -> list[TranscriptCue]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if path.suffix.lower() in {".vtt", ".srt"}:
+        return _parse_timed_transcript(text)
+    return _parse_bracketed_transcript(text) or _parse_plain_transcript(text)
+
+
 def _candidate_transcript_dirs(folder: Path) -> list[Path]:
     dirs = [
         folder,
@@ -111,31 +118,76 @@ def _candidate_transcript_dirs(folder: Path) -> list[Path]:
     return unique
 
 
-def _find_transcript(sources: Sources) -> Path | None:
+def _candidate_transcripts(sources: Sources) -> list[Path]:
     candidates: list[Path] = []
     for folder in _candidate_transcript_dirs(sources.folder):
         candidates.extend(list(folder.glob("*.vtt")) + list(folder.glob("*.srt")) + list(folder.glob("*.md")) + list(folder.glob("*.txt")))
-    by_name = {path.name.lower(): path for path in candidates}
+    unique: list[Path] = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+def _find_transcript(
+    sources: Sources,
+    preferred_segments: list[tuple[float, float]] | None = None,
+) -> tuple[Path, list[TranscriptCue], str, int] | None:
+    candidates = _candidate_transcripts(sources)
+    if preferred_segments:
+        scored: list[tuple[int, int, str, Path, list[TranscriptCue]]] = []
+        for candidate in candidates:
+            cues = parse_transcript_text(candidate)
+            overlap_count = sum(
+                1
+                for cue in cues
+                if any(cue.start_s < end_s and cue.end_s > start_s for start_s, end_s in preferred_segments)
+            )
+            timed_count = sum(1 for cue in cues if cue.start_s > 0)
+            if overlap_count:
+                scored.append((overlap_count, timed_count, str(candidate), candidate, cues))
+        if scored:
+            scored.sort(key=lambda item: (-item[0], -item[1], item[2]))
+            overlap_count, _, _, transcript, cues = scored[0]
+            return transcript, cues, "overlaps_edit_decisions", overlap_count
+
+    by_name: dict[str, Path] = {}
+    for path in candidates:
+        by_name.setdefault(path.name.lower(), path)
     for name in TRANSCRIPT_NAMES:
         if name in by_name:
-            return by_name[name]
+            transcript = by_name[name]
+            return transcript, parse_transcript_text(transcript), "preferred_name", 0
     transcript_like = [path for path in candidates if "transcript" in path.name.lower() or "caption" in path.name.lower()]
-    return sorted(transcript_like)[0] if transcript_like else None
+    if transcript_like:
+        transcript = sorted(transcript_like)[0]
+        return transcript, parse_transcript_text(transcript), "transcript_like", 0
+    return None
 
 
-def load_transcript_cues(sources: Sources, run_dir: Path, receipts: Receipts) -> list[TranscriptCue]:
-    transcript = _find_transcript(sources)
-    if not transcript:
+def load_transcript_cues(
+    sources: Sources,
+    run_dir: Path,
+    receipts: Receipts,
+    *,
+    preferred_segments: list[tuple[float, float]] | None = None,
+) -> list[TranscriptCue]:
+    selected = _find_transcript(sources, preferred_segments=preferred_segments)
+    if not selected:
         receipts.log("transcript", status="missing", code="transcript_source_missing", folder=str(sources.folder))
         return []
-    text = transcript.read_text(encoding="utf-8", errors="replace")
-    if transcript.suffix.lower() in {".vtt", ".srt"}:
-        cues = _parse_timed_transcript(text)
-    else:
-        cues = _parse_bracketed_transcript(text) or _parse_plain_transcript(text)
+    transcript, cues, selection_reason, overlap_count = selected
     payload = {"source": str(transcript), "cues": [cue.as_dict() for cue in cues]}
     (run_dir / "transcript-cues.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    receipts.log("transcript", status="pass", source=str(transcript), cue_count=len(cues), output=str(run_dir / "transcript-cues.json"))
+    receipts.log(
+        "transcript",
+        status="pass",
+        source=str(transcript),
+        cue_count=len(cues),
+        output=str(run_dir / "transcript-cues.json"),
+        selection_reason=selection_reason,
+        edit_decision_overlap_cues=overlap_count,
+    )
     return cues
 
 
@@ -151,13 +203,13 @@ def semantic_chapters(cues: list[TranscriptCue], *, max_chapters: int = 8) -> li
         if key in seen:
             continue
         seen.add(key)
-        chapters.append({"time": _format_chapter_time(cue.start_s), "title": title, "source": "transcript"})
+        chapters.append({"time": format_chapter_time(cue.start_s), "title": title, "source": "transcript"})
         if len(chapters) == max_chapters:
             break
     return chapters
 
 
-def _format_chapter_time(seconds: float) -> str:
+def format_chapter_time(seconds: float) -> str:
     total = int(max(0, seconds))
     minutes, secs = divmod(total, 60)
     hours, minutes = divmod(minutes, 60)

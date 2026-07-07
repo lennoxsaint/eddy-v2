@@ -455,12 +455,12 @@ def test_transcript_sidecar_drives_semantic_chapters_and_short_starts(tmp_path: 
     assert provenance["transcript_available"] is True
     assert provenance["transcript_cue_count"] == 3
     assert provenance["speech_accurate_subtitles"] is False
-    assert [chapter["source"] for chapter in launch_kit["chapters"]] == ["transcript", "transcript", "transcript"]
+    assert [chapter["source"] for chapter in launch_kit["chapters"]] == ["transcript"]
     assert launch_kit["chapters"][0]["title"].startswith("First semantic hook")
     assert plan["short_starts_s"] == [0.0, 17.0, 34.0]
     assert len(list((result.run_dir / "final" / "shorts").glob("short-*.mp4"))) == 3
     assert any(row["event"] == "transcript" and row["status"] == "pass" and row["cue_count"] == 3 for row in rows)
-    assert any(row["event"] == "semantic_plan" and row["status"] == "pass" and row["chapter_count"] == 3 for row in rows)
+    assert any(row["event"] == "semantic_plan" and row["status"] == "pass" and row["chapter_count"] == 1 for row in rows)
     assert any(row["event"] == "cut_plan" and row["short_start_source"] == "transcript" for row in rows)
 
 
@@ -497,10 +497,103 @@ def test_parent_markdown_transcript_is_used_for_raw_folder(tmp_path: Path):
 
     assert cues["source"] == str(transcript)
     assert plan.transcript_cue_count == 3
-    assert [chapter["time"] for chapter in plan.semantic_chapters or []] == ["00:02", "00:20", "00:38"]
+    assert [chapter["time"] for chapter in plan.semantic_chapters or []] == ["00:02"]
     assert plan.short_starts_s == [1.0, 19.0, 35.0]
     assert any(row["event"] == "transcript" and row["status"] == "pass" and row["source"] == str(transcript) for row in rows)
     assert any(row["event"] == "cut_plan" and row["short_start_source"] == "transcript" for row in rows)
+
+
+def test_edit_decisions_drive_long_segments_and_timed_transcript(tmp_path: Path):
+    folder = make_layered_fixture(tmp_path / "project" / "raw", 40)
+    (folder.parent / "transcript.md").write_text("Untimed curated transcript that should not win when EDL timing exists.", encoding="utf-8")
+    descript_dir = folder.parent / "edit" / "descript-export"
+    descript_dir.mkdir(parents=True)
+    descript = descript_dir / "descript-transcript-copied.md"
+    descript.write_text(
+        "\n".join(
+            [
+                "# Timed export",
+                "",
+                "[00:00:02] First selected interval explains the isolated app",
+                "",
+                "[00:00:23] Second selected interval shows the proxy bridge",
+                "",
+                "[00:00:11] Ignored tail outside selected duration",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (folder.parent / "edit" / "edit-decisions.json").write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {"id": "intro", "start": 1, "end": 4},
+                    {"id": "proxy", "start": 22, "end": 25},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    receipts = Receipts(tmp_path / "receipts.jsonl")
+    intent = EditIntent(
+        target_duration_s=5,
+        identity="code-cinema",
+        shorts_target=2,
+        hook="EDL hook",
+        title="EDL Test",
+    )
+
+    plan = create_edit_plan(discover_sources(folder), tmp_path / "run", intent, receipts)
+    rows = receipts.read_all()
+    cues = json.loads((tmp_path / "run" / "transcript-cues.json").read_text(encoding="utf-8"))
+
+    assert cues["source"] == str(descript)
+    assert [segment.as_dict() for segment in plan.source_segments()] == [
+        {"start_s": 1, "duration_s": 3, "reason": "edit_decision:intro"},
+        {"start_s": 22, "duration_s": 2, "reason": "edit_decision:proxy"},
+    ]
+    assert plan.long_duration_s == 5
+    assert [chapter["time"] for chapter in plan.semantic_chapters or []] == ["00:01", "00:04"]
+    assert [chapter["source_s"] for chapter in plan.semantic_chapters or []] == [2, 23]
+    assert plan.short_starts_s == [1.0, 22.0]
+    assert any(row["event"] == "edit_decision_sidecar" and row["status"] == "pass" and row["segment_count"] == 2 for row in rows)
+    assert any(
+        row["event"] == "transcript"
+        and row["source"] == str(descript)
+        and row["selection_reason"] == "overlaps_edit_decisions"
+        for row in rows
+    )
+
+
+def test_edit_folder_renders_edit_decision_segments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "project" / "raw", 12)
+    edit_dir = folder.parent / "edit"
+    edit_dir.mkdir(parents=True)
+    (edit_dir / "edit-decisions.json").write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {"id": "first", "start": 1, "end": 3},
+                    {"id": "second", "start": 7, "end": 9},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+
+    result = edit_folder(folder, local_only=True, target_duration_s=4)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    plan = json.loads((result.run_dir / "edit-plan.json").read_text(encoding="utf-8"))
+    probe = ffprobe_json(result.run_dir / "final" / "video.mp4")
+
+    assert result.status == "blocked"
+    assert len(plan["long_segments"]) == 2
+    assert plan["long_duration_s"] == 4
+    assert float(probe["format"]["duration"]) == pytest.approx(4, abs=0.75)
+    assert any(row["event"] == "audio_extract" and row.get("mode") == "segments" for row in rows)
+    assert any(row["event"] == "long_segment_concat" and row["status"] == "pass" for row in rows)
+    assert any(row["event"] == "gate" and row["name"] == "long_media_integrity" and row["status"] == "pass" for row in rows)
 
 
 def test_semantic_short_starts_allow_honest_shortfall():
