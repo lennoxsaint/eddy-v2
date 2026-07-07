@@ -53,7 +53,7 @@ For dry tests, set `EDDY_V2_FAKE_DESCRIPT=1` with a dummy `DESCRIPT_API_KEY`; th
 
 ## Proof Gates
 
-Before a run can finish as complete, Eddy gates source hashes, HyperFrames motion artifacts, caption sidecars, long-video media integrity, Shorts geometry/duration, launch-kit presence, cost cap, and final ffprobe output. Corrupt Shorts are moved to `quarantine/` and do not count toward the Shorts yield; corrupt long video, motion, captions, source safety, or launch package blocks the run.
+Before a run can finish as complete, Eddy gates source hashes, HyperFrames motion artifacts, timed caption artifacts, caption sidecars, long-video media integrity, Shorts geometry/duration, launch-kit presence, cost cap, and final ffprobe output. Corrupt Shorts are moved to `quarantine/` and do not count toward the Shorts yield; corrupt long video, motion, captions, source safety, or launch package blocks the run.
 
 ## Scope Boundaries
 

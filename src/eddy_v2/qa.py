@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -65,14 +66,19 @@ def validate_long_video(run_dir: Path, output: Path, receipts: Receipts, *, expe
 
 def validate_caption_sidecars(final_dir: Path, receipts: Receipts, *, title: str) -> None:
     missing_or_empty = []
-    for name in ("subtitles.srt", "subtitles.vtt"):
+    for name in ("captions.json", "subtitles.srt", "subtitles.vtt"):
         path = final_dir / name
         if not path.exists() or not path.read_text(encoding="utf-8").strip():
             missing_or_empty.append(name)
     if missing_or_empty:
         receipts.log("gate", name="caption_sidecars", status="failed", missing=missing_or_empty)
         raise RuntimeError(f"caption_sidecars_corrupt:{','.join(missing_or_empty)}")
-    receipts.log("gate", name="caption_sidecars", status="pass", files=["subtitles.srt", "subtitles.vtt"], title=title)
+    captions = json.loads((final_dir / "captions.json").read_text(encoding="utf-8"))
+    cues = captions.get("cues") if isinstance(captions.get("cues"), list) else []
+    if not cues:
+        receipts.log("gate", name="caption_sidecars", status="failed", reason="no_cues")
+        raise RuntimeError("caption_sidecars_corrupt:no_cues")
+    receipts.log("gate", name="caption_sidecars", status="pass", files=["captions.json", "subtitles.srt", "subtitles.vtt"], title=title, cue_count=len(cues))
 
 
 def validate_motion_artifact(project: Path, output: Path, receipts: Receipts, *, portrait: bool) -> None:

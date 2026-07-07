@@ -5,6 +5,7 @@ import textwrap
 from pathlib import Path
 
 from .audio import polish_audio
+from .captions import CaptionCue, build_short_cues, write_caption_artifacts, write_cue_textfiles
 from .commands import duration_s, ffprobe_json, run_command
 from .cost import CostTracker
 from .models import EditIntent
@@ -25,11 +26,26 @@ def drawtext_file(run_dir: Path, name: str, text: str, *, width: int) -> str:
     return str(path).replace("\\", "\\\\").replace(":", "\\:")
 
 
-def write_sidecars(final_dir: Path, duration: float, title: str) -> None:
-    srt = final_dir / "subtitles.srt"
-    vtt = final_dir / "subtitles.vtt"
-    srt.write_text(f"1\n00:00:00,000 --> 00:00:{min(int(duration), 59):02d},000\n{title}\n", encoding="utf-8")
-    vtt.write_text(f"WEBVTT\n\n00:00.000 --> 00:{min(int(duration), 59):02d}.000\n{title}\n", encoding="utf-8")
+def cue_drawtext_filters(
+    run_dir: Path,
+    prefix: str,
+    cues: list[CaptionCue],
+    *,
+    width: int,
+    x: str,
+    y: str,
+    fontsize: int,
+    boxcolor: str,
+    borderw: int,
+) -> str:
+    filters = []
+    for cue, textfile in write_cue_textfiles(run_dir, prefix, cues, width=width):
+        filters.append(
+            f"drawtext=textfile='{textfile}':x={x}:y={y}:fontsize={fontsize}:line_spacing=8:"
+            f"fontcolor=white:box=1:boxcolor={boxcolor}:boxborderw={borderw}:"
+            f"enable='between(t,{cue.start_s:.3f},{cue.end_s:.3f})'"
+        )
+    return ",".join(filters)
 
 
 def render_long(
@@ -54,15 +70,24 @@ def render_long(
     validate_motion_artifact(motion_project, motion_output, receipts, portrait=False)
 
     output = final_dir / "video.mp4"
-    long_hook_file = drawtext_file(run_dir, "long-hook", intent.hook, width=52)
+    long_cues = write_caption_artifacts(final_dir, intent, target, receipts)
+    long_caption_filters = cue_drawtext_filters(
+        run_dir,
+        "long-callout",
+        long_cues,
+        width=48,
+        x="80",
+        y="h-210",
+        fontsize=42,
+        boxcolor="0x07111fcc",
+        borderw=22,
+    )
     if sources.screen:
         filter_complex = (
             "[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,"
             "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[base];"
             "[0:v]scale=420:-1[cam];"
-            "[base][cam]overlay=40:40,"
-            f"drawtext=textfile='{long_hook_file}':x=80:y=h-170:fontsize=44:line_spacing=8:"
-            "fontcolor=white:box=1:boxcolor=0x07111fcc:boxborderw=24[v]"
+            f"[base][cam]overlay=40:40,{long_caption_filters}[v]"
         )
         args = [
             "ffmpeg",
@@ -117,7 +142,7 @@ def render_long(
             "-i",
             str(audio),
             "-vf",
-            f"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,drawtext=textfile='{long_hook_file}':x=80:y=h-170:fontsize=44:line_spacing=8:fontcolor=white:box=1:boxcolor=0x07111fcc:boxborderw=24",
+            f"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,{long_caption_filters}",
             "-map",
             "0:v",
             "-map",
@@ -136,7 +161,6 @@ def render_long(
             str(output),
         ]
     run_command(args, receipts, event="ffmpeg", timeout_s=7200)
-    write_sidecars(final_dir, target, intent.title)
     probe = ffprobe_json(output)
     (final_dir / "video.ffprobe.json").write_text(json.dumps(probe, indent=2), encoding="utf-8")
     validate_caption_sidecars(final_dir, receipts, title=intent.title)
@@ -152,7 +176,19 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
     validate_motion_artifact(motion_project, motion_output, receipts, portrait=True)
     source_duration = duration_s(sources.camera)
     outputs: list[Path] = []
-    short_hook_file = drawtext_file(run_dir, "short-hook", intent.hook, width=28)
+    short_cues = build_short_cues(intent)
+    short_caption_filters = cue_drawtext_filters(
+        run_dir,
+        "short-caption",
+        short_cues,
+        width=24,
+        x="60",
+        y="1380",
+        fontsize=58,
+        boxcolor="0x07111fe6",
+        borderw=24,
+    )
+    receipts.log("caption_plan", status="pass", surface="shorts", cue_count=len(short_cues))
     starts = plan.short_starts_s if plan else [float(index * 20) for index in range(intent.shorts_target)]
     for index, start in enumerate(starts[: intent.shorts_target]):
         if start + 10 > source_duration:
@@ -163,9 +199,7 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
             filter_complex = (
                 "[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[cam];"
                 "[1:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:black[screen];"
-                "[cam][screen]vstack=inputs=2,"
-                f"drawtext=textfile='{short_hook_file}':x=60:y=1010:fontsize=52:line_spacing=10:fontcolor=white:"
-                "box=1:boxcolor=0x07111fd9:boxborderw=20[v]"
+                f"[cam][screen]vstack=inputs=2,{short_caption_filters}[v]"
             )
             args = [
                 "ffmpeg",
@@ -212,7 +246,7 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 "-i",
                 str(sources.camera),
                 "-vf",
-                f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawtext=textfile='{short_hook_file}':x=60:y=1450:fontsize=52:line_spacing=10:fontcolor=white:box=1:boxcolor=0x07111fd9:boxborderw=20",
+                f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,{short_caption_filters}",
                 "-r",
                 "30",
                 "-c:v",

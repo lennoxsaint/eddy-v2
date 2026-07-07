@@ -192,6 +192,30 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert {"motion_artifact", "caption_sidecars", "long_media_integrity", "short_media_integrity", "launch_package", "final_media_probe"} <= gates
 
 
+def test_timed_caption_artifacts_are_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 16)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=12)
+    captions = json.loads((result.run_dir / "final" / "captions.json").read_text(encoding="utf-8"))
+    srt = (result.run_dir / "final" / "subtitles.srt").read_text(encoding="utf-8")
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    assert result.status == "complete"
+    assert len(captions["cues"]) >= 2
+    assert "\n2\n" in srt
+    assert any(row["event"] == "caption_plan" and row["status"] == "pass" and row.get("cue_count", 0) >= 2 for row in rows)
+
+
+def test_short_caption_textfiles_are_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 16)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+    short_caption_files = sorted((result.run_dir / "text").glob("short-caption-*.txt"))
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    assert result.status == "complete"
+    assert len(short_caption_files) >= 3
+    assert any(row["event"] == "caption_plan" and row.get("surface") == "shorts" and row.get("cue_count") == 3 for row in rows)
+
+
 def test_corrupt_short_is_quarantined_not_counted(tmp_path: Path):
     receipts = Receipts(tmp_path / "receipts.jsonl")
     output = tmp_path / "final" / "shorts" / "short-01.mp4"
