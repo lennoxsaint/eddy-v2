@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .commands import ffprobe_json, run_command
+from .proof import read_json_object
 from .receipts import Receipts
 
 
@@ -56,7 +57,7 @@ def _criterion_rows() -> list[dict[str, Any]]:
     ]
 
 
-def build_review_packet(run_dir: Path, long_video: Path, shorts: list[Path], receipts: Receipts) -> Path | None:
+def build_review_packet(run_dir: Path, long_video: Path, shorts: list[Path], receipts: Receipts, *, audio_proof: Path | None = None) -> Path | None:
     review_dir = run_dir / "final" / "review"
     try:
         long_duration = _duration(long_video)
@@ -82,6 +83,8 @@ def build_review_packet(run_dir: Path, long_video: Path, shorts: list[Path], rec
             "shorts": [str(path) for path in shorts],
             "long_samples": long_samples,
             "short_samples": short_samples,
+            "audio_proof_path": str(audio_proof) if audio_proof else None,
+            "audio_proof": read_json_object(audio_proof),
             "criteria": _criterion_rows(),
         }
         review_dir.mkdir(parents=True, exist_ok=True)
@@ -110,6 +113,7 @@ def _markdown(packet: dict[str, Any]) -> str:
         f"- shorts_count: {len(packet['shorts'])}",
         f"- publishable_8_of_10: {str(packet['publishable_8_of_10']).lower()}",
         f"- winner_bar: {packet['winner_bar']}",
+        f"- audio_quality: {(packet.get('audio_proof') or {}).get('quality_status', 'missing')}",
         "",
         "## Review Criteria",
         "",

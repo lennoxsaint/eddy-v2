@@ -11,6 +11,7 @@ from .cost import CostTracker
 from .models import create_intent
 from .plan import create_edit_plan
 from .policy import RunPolicy
+from .proof import read_json_object, write_audio_proof
 from .qa import validate_launch_package
 from .receipts import Receipts
 from .render import render_long, render_shorts
@@ -61,12 +62,30 @@ def edit_folder(
         )
         plan = create_edit_plan(sources, run_dir, intent, receipts)
         video = render_long(sources, run_dir, intent, receipts, policy, cost, plan=plan)
+        audio_proof = write_audio_proof(run_dir, receipts)
         shorts = render_shorts(sources, run_dir, intent, receipts, plan=plan)
-        review_packet = build_review_packet(run_dir, video, shorts, receipts)
+        review_packet = build_review_packet(run_dir, video, shorts, receipts, audio_proof=audio_proof)
         if review_packet is None:
             blockers.append("review_packet_failed")
-        write_launch_kit(run_dir, intent.as_dict(), video, shorts, plan=plan.as_dict(), review_packet=review_packet)
-        write_scorecard(run_dir, cost.summary(), long_video=video, shorts=shorts, blockers=blockers, plan=plan.as_dict(), review_packet=review_packet)
+        write_launch_kit(
+            run_dir,
+            intent.as_dict(),
+            video,
+            shorts,
+            plan=plan.as_dict(),
+            review_packet=review_packet,
+            audio_proof=audio_proof,
+        )
+        write_scorecard(
+            run_dir,
+            cost.summary(),
+            long_video=video,
+            shorts=shorts,
+            blockers=blockers,
+            plan=plan.as_dict(),
+            review_packet=review_packet,
+            audio_proof=audio_proof,
+        )
         validate_launch_package(run_dir, video, shorts, receipts)
         receipts.log("gate", name="final_media_probe", status="pass", probe=ffprobe_json(video))
     except Exception as exc:
@@ -82,7 +101,16 @@ def edit_folder(
     return RunResult(run_dir=run_dir, status="blocked" if blockers else "complete", blockers=blockers)
 
 
-def write_launch_kit(run_dir: Path, intent: dict, video: Path, shorts: list[Path], *, plan: dict | None, review_packet: Path | None = None) -> None:
+def write_launch_kit(
+    run_dir: Path,
+    intent: dict,
+    video: Path,
+    shorts: list[Path],
+    *,
+    plan: dict | None,
+    review_packet: Path | None = None,
+    audio_proof: Path | None = None,
+) -> None:
     kit = run_dir / "final" / "launch-kit"
     kit.mkdir(parents=True, exist_ok=True)
     chapters = [{"time": "00:00", "title": "Opening", "source": "fallback"}]
@@ -96,6 +124,8 @@ def write_launch_kit(run_dir: Path, intent: dict, video: Path, shorts: list[Path
         "shorts": [str(p) for p in shorts],
         "edit_plan": plan,
         "review_packet": str(review_packet) if review_packet else None,
+        "audio_proof_path": str(audio_proof) if audio_proof else None,
+        "audio_proof": read_json_object(audio_proof),
     }
     (kit / "launch-kit.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     (kit / "README.md").write_text(f"# {data['title']}\n\n{data['description']}\n", encoding="utf-8")
@@ -110,7 +140,9 @@ def write_scorecard(
     blockers: list[str],
     plan: dict | None,
     review_packet: Path | None = None,
+    audio_proof: Path | None = None,
 ) -> None:
+    audio_summary = read_json_object(audio_proof)
     score = {
         "status": "blocked" if blockers else "complete",
         "long_video": str(long_video) if long_video else None,
@@ -122,6 +154,8 @@ def write_scorecard(
         "notes": "Lennox taste score is required before claiming bakeoff victory.",
         "edit_plan": plan,
         "review_packet": str(review_packet) if review_packet else None,
+        "audio_proof_path": str(audio_proof) if audio_proof else None,
+        "audio_proof": audio_summary,
     }
     (run_dir / "scorecard.json").write_text(json.dumps(score, indent=2), encoding="utf-8")
     (run_dir / "scorecard.md").write_text(
@@ -133,6 +167,7 @@ def write_scorecard(
                 f"- long_video: {score['long_video']}",
                 f"- shorts_count: {score['shorts_count']}",
                 f"- cost: ${cost_summary['spent_usd']:.4f} / ${cost_summary['cap_usd']:.2f}",
+                f"- audio_quality: {(audio_summary or {}).get('quality_status', 'missing')}",
                 f"- review_packet: {score['review_packet'] or 'none'}",
                 f"- blockers: {', '.join(blockers) if blockers else 'none'}",
                 "- publishable_8_of_10: false pending Lennox review",

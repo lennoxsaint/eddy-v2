@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .commands import ffprobe_json
+from .proof import read_json_object
 from .receipts import Receipts
 
 
@@ -128,6 +129,7 @@ def summarize_run(run_dir: Path, *, label: str) -> dict[str, Any]:
     shorts = _shorts(run_dir)
     cost_raw = scorecard.get("cost")
     cost: dict[str, Any] = cost_raw if isinstance(cost_raw, dict) else {}
+    audio_proof = read_json_object(run_dir / "final" / "audio-proof.json")
     blockers_raw = scorecard.get("blockers")
     blockers = blockers_raw if isinstance(blockers_raw, list) else []
     return {
@@ -146,6 +148,7 @@ def summarize_run(run_dir: Path, *, label: str) -> dict[str, Any]:
             "spent_usd": cost.get("spent_usd"),
             "cap_usd": cost.get("cap_usd"),
         },
+        "audio_proof": audio_proof,
         "source_hash_intact": _source_hash_intact(rows),
         "blockers": blockers,
     }
@@ -238,6 +241,8 @@ def _comparison(v2: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
         "shorts_count_delta": int(v2.get("shorts_count") or 0) - int(current.get("shorts_count") or 0),
         "v2_source_hash_intact": v2.get("source_hash_intact"),
         "current_source_hash_intact": current.get("source_hash_intact"),
+        "v2_audio_quality": (v2.get("audio_proof") or {}).get("quality_status"),
+        "current_audio_quality": (current.get("audio_proof") or {}).get("quality_status"),
         "human_quality_review": "pending_lennox_8_of_10_review",
     }
 
@@ -267,6 +272,7 @@ def _markdown(report: dict[str, Any]) -> str:
         f"- long_video: {v2['long_video']['path']}",
         f"- long_duration_s: {v2['long_video']['duration_s']}",
         f"- shorts_count: {v2['shorts_count']}",
+        f"- audio_quality: {(v2.get('audio_proof') or {}).get('quality_status', 'missing')}",
         f"- receipts_rows: {v2['receipts']['row_count']}",
         f"- source_hash_intact: {v2['source_hash_intact']}",
         "",
@@ -289,6 +295,7 @@ def _markdown(report: dict[str, Any]) -> str:
                 f"- long_video: {current['long_video']['path']}",
                 f"- long_duration_s: {current['long_video']['duration_s']}",
                 f"- shorts_count: {current['shorts_count']}",
+                f"- audio_quality: {(current.get('audio_proof') or {}).get('quality_status', 'missing')}",
                 f"- receipts_rows: {current['receipts']['row_count']}",
                 f"- source_hash_intact: {current['source_hash_intact']}",
             ]

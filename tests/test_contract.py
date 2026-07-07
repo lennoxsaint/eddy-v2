@@ -210,7 +210,7 @@ def test_receipts_cover_core_events(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     launch_kit = json.loads((result.run_dir / "final" / "launch-kit" / "launch-kit.json").read_text(encoding="utf-8"))
     events = {row["event"] for row in rows}
-    assert {"run_start", "source_hash", "transcript", "semantic_plan", "ffmpeg", "hyperframes", "cut_plan", "gate", "run_finish"} <= events
+    assert {"run_start", "source_hash", "transcript", "semantic_plan", "ffmpeg", "hyperframes", "cut_plan", "audio_proof", "gate", "run_finish"} <= events
     assert any(row["event"] == "transcript" and row["status"] == "missing" and row["code"] == "transcript_source_missing" for row in rows)
     assert any(row["event"] == "semantic_plan" and row["status"] == "fallback" for row in rows)
     assert launch_kit["chapters"][0]["source"] == "fallback"
@@ -241,6 +241,10 @@ def test_review_packet_is_written_for_completed_run(tmp_path: Path, monkeypatch:
     assert result.status == "complete"
     assert packet_path == result.run_dir / "final" / "review" / "review-packet.json"
     assert launch_kit["review_packet"] == str(packet_path)
+    assert scorecard["audio_proof_path"] == str(result.run_dir / "final" / "audio-proof.json")
+    assert launch_kit["audio_proof_path"] == scorecard["audio_proof_path"]
+    assert packet["audio_proof_path"] == scorecard["audio_proof_path"]
+    assert packet["audio_proof"]["quality_status"] == "local_degraded_fallback"
     assert (result.run_dir / "final" / "review" / "README.md").exists()
     assert packet["status"] == "pending_lennox_review"
     assert packet["publishable_8_of_10"] is False
@@ -731,6 +735,8 @@ def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, mo
     assert result["winner"] == "undecided_pending_lennox_8_of_10_review"
     assert Path(result["bakeoff_json"]).exists()
     assert Path(result["bakeoff"]).exists()
+    report = json.loads(Path(result["bakeoff_json"]).read_text(encoding="utf-8"))
+    assert report["candidates"]["eddy_v2"]["audio_proof"]["quality_status"] == "local_degraded_fallback"
 
 
 def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -745,6 +751,12 @@ def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest
     assert any(row["event"] == "descript_publish" and row["status"] == "fake" for row in rows)
     assert any(row["event"] == "audio_descript_parity" and row["status"] == "pass" for row in rows)
     assert any(row["event"] == "audio_polish" and row["selected_backend"] == "descript_studio_sound" for row in rows)
+    audio_proof = json.loads((result.run_dir / "final" / "audio-proof.json").read_text(encoding="utf-8"))
+    scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
+    assert audio_proof["quality_status"] == "strong_studio_sound"
+    assert audio_proof["strong_studio_sound"] is True
+    assert audio_proof["quality_blockers"] == []
+    assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
 
 
 def test_mocked_auphonic_fallback_is_selected_after_descript_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -761,6 +773,11 @@ def test_mocked_auphonic_fallback_is_selected_after_descript_missing(tmp_path: P
     assert any(row["event"] == "audio_auphonic_parity" and row["status"] == "pass" for row in rows)
     assert any(row["event"] == "audio_polish" and row["selected_backend"] == "auphonic" for row in rows)
     assert not any(row["event"] == "audio_elevenlabs_parity" and row["status"] == "pass" for row in rows)
+    audio_proof = json.loads((result.run_dir / "final" / "audio-proof.json").read_text(encoding="utf-8"))
+    assert audio_proof["quality_status"] == "cloud_audio_fallback"
+    assert audio_proof["strong_studio_sound"] is False
+    assert audio_proof["cloud_polish_proven"] is True
+    assert "strong_studio_sound_not_proven" in audio_proof["quality_blockers"]
 
 
 def test_mocked_elevenlabs_fallback_is_selected_after_auphonic_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -776,6 +793,10 @@ def test_mocked_elevenlabs_fallback_is_selected_after_auphonic_missing(tmp_path:
     assert any(row["event"] == "elevenlabs_audio" and row["status"] == "fake" for row in rows)
     assert any(row["event"] == "audio_elevenlabs_parity" and row["status"] == "pass" for row in rows)
     assert any(row["event"] == "audio_polish" and row["selected_backend"] == "elevenlabs_audio_isolation" for row in rows)
+    audio_proof = json.loads((result.run_dir / "final" / "audio-proof.json").read_text(encoding="utf-8"))
+    assert audio_proof["quality_status"] == "cloud_audio_fallback"
+    assert audio_proof["strong_studio_sound"] is False
+    assert audio_proof["cloud_polish_proven"] is True
 
 
 def test_local_only_refuses_configured_cloud_audio_without_upload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -798,6 +819,11 @@ def test_local_only_refuses_configured_cloud_audio_without_upload(tmp_path: Path
     assert not any(row["event"] == "auphonic_audio" for row in rows)
     assert not any(row["event"] == "elevenlabs_audio" for row in rows)
     assert any(row["event"] == "audio_polish" and row["selected_backend"] == "local_loudnorm_fallback" for row in rows)
+    audio_proof = json.loads((result.run_dir / "final" / "audio-proof.json").read_text(encoding="utf-8"))
+    assert audio_proof["quality_status"] == "local_degraded_fallback"
+    assert audio_proof["strong_studio_sound"] is False
+    assert "strong_studio_sound_not_proven" in audio_proof["quality_blockers"]
+    assert "cloud_audio_credentials_missing_or_failed" in audio_proof["quality_blockers"]
 
 
 def test_cli_doctor_runs():
@@ -829,6 +855,7 @@ def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatc
     assert report["current_output_proof"]["status"] == "missing"
     assert report["current_output_proof"]["reason"] == "current_output_proof_missing"
     assert report["comparison"]["status"] == "current_output_proof_missing"
+    assert report["candidates"]["eddy_v2"]["audio_proof"]["quality_status"] == "local_degraded_fallback"
     assert (result.run_dir / "bakeoff.json").exists()
     assert (result.run_dir / "bakeoff.md").exists()
     assert any(row["event"] == "bakeoff_compare" and row["status"] == "missing" for row in rows)
@@ -860,3 +887,4 @@ def test_bakeoff_compares_explicit_current_run(tmp_path: Path, monkeypatch: pyte
     assert report["candidates"]["current_eddy"]["shorts_count"] == 1
     assert report["comparison"]["status"] == "metrics_compared"
     assert report["comparison"]["shorts_count_delta"] == 2
+    assert report["comparison"]["v2_audio_quality"] == "local_degraded_fallback"
