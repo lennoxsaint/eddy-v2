@@ -12,6 +12,7 @@ from eddy_v2.audio_retry import retry_audio_proof
 from eddy_v2.bakeoff import build_bakeoff_report
 from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json
+from eddy_v2.cloud_quality import cloud_audio_profile
 from eddy_v2.doctor import doctor_payload
 from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import TOOLS, handle
@@ -900,6 +901,7 @@ def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest
     scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert audio_proof["quality_status"] == "strong_studio_sound"
     assert audio_proof["strong_studio_sound"] is True
+    assert audio_proof["cloud_quality_profile"]["audio"]["strong_studio_sound_ready"] is True
     assert audio_proof["quality_blockers"] == []
     assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
 
@@ -1032,6 +1034,7 @@ def test_local_only_refuses_configured_cloud_audio_without_upload(tmp_path: Path
     assert any(row["event"] == "audio_polish" and row["selected_backend"] == "local_loudnorm_fallback" for row in rows)
     audio_proof = json.loads((result.run_dir / "final" / "audio-proof.json").read_text(encoding="utf-8"))
     assert audio_proof["quality_status"] == "local_degraded_fallback"
+    assert audio_proof["cloud_quality_profile"]["audio"]["audio_ready"] is True
     assert audio_proof["strong_studio_sound"] is False
     assert "strong_studio_sound_not_proven" in audio_proof["quality_blockers"]
     assert "cloud_audio_credentials_missing_or_failed" in audio_proof["quality_blockers"]
@@ -1043,9 +1046,36 @@ def test_cli_doctor_runs():
     data = json.loads(proc.stdout)
     assert data["ok"] is True
     assert data["missing_required_runtime_tools"] == []
+    assert data["cloud_quality_profile"]["audio"]["audio_ready"] is False
+    assert data["cloud_quality_profile"]["audio"]["providers"]["descript"]["missing"] == ["DESCRIPT_API_KEY"]
     for tool in ("ffmpeg", "ffprobe", "node", "npx"):
         assert data["required_runtime_tools"][tool] is True
     assert "code-cinema" in data["identities"]
+
+
+def test_cloud_audio_profile_lists_exact_unblock_options_without_secret_values():
+    data = cloud_audio_profile({"AUPHONIC_API_KEY": "secretish"})
+
+    assert data["audio_ready"] is False
+    assert data["strong_studio_sound_ready"] is False
+    assert data["providers"]["descript"]["missing"] == ["DESCRIPT_API_KEY"]
+    assert data["providers"]["auphonic"]["missing"] == ["AUPHONIC_PRESET_OR_AUPHONIC_PRESET_UUID"]
+    assert data["providers"]["elevenlabs"]["missing"] == ["ELEVENLABS_API_KEY"]
+    assert data["strong_studio_sound_unblock"] == ["DESCRIPT_API_KEY"]
+    assert {"provider": "descript", "required": ["DESCRIPT_API_KEY"], "unlocks": "strong_studio_sound", "uploads": "audio_extract_only"} in data[
+        "audio_quality_unblock_options"
+    ]
+
+
+def test_doctor_reports_configured_cloud_audio_without_exposing_secret_values():
+    data = doctor_payload(lambda name: f"/usr/bin/{name}", {"DESCRIPT_API_KEY": "not-for-output"})
+    audio = data["cloud_quality_profile"]["audio"]
+
+    assert audio["audio_ready"] is True
+    assert audio["strong_studio_sound_ready"] is True
+    assert audio["configured_providers"] == ["descript"]
+    assert audio["providers"]["descript"]["missing"] == []
+    assert "not-for-output" not in json.dumps(audio)
 
 
 def test_doctor_fails_when_motion_runtime_is_missing():

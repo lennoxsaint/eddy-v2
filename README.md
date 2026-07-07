@@ -31,6 +31,8 @@ eddy doctor
 ```
 
 `eddy doctor` fails if any required runtime tool is missing: `ffmpeg`, `ffprobe`, `node`, or `npx`.
+It also reports a secret-safe Cloud Quality Profile for audio, including which provider credentials
+are configured and the exact environment variable options needed to unblock cloud audio proof.
 
 ## CLI
 
@@ -69,6 +71,9 @@ When `DESCRIPT_API_KEY` is configured, Eddy tries Descript Studio Sound first us
 If Descript is missing or fails parity, Eddy tries Auphonic when `AUPHONIC_API_KEY` and `AUPHONIC_PRESET` or `AUPHONIC_PRESET_UUID` are configured, then ElevenLabs Audio Isolation when `ELEVENLABS_API_KEY` is configured. Both fallbacks upload only the extracted WAV, charge against the same run budget, and must pass duration parity before selection. If every cloud backend is missing, refused, or fails, Eddy uses the local loudness fallback and records the lower-quality selection.
 
 Every run that reaches audio writes `final/audio-proof.json`. It records the selected backend, each provider parity result, whether Strong Studio Sound was proven, and any publishability quality blockers such as `strong_studio_sound_not_proven`. Descript parity or a proven cloud fallback can pass the machine audio gate. A local fallback is a reviewable partial only: Eddy still writes the long video, Shorts, launch kit, and review packet, but the run status is blocked until cloud audio proof is upgraded.
+
+`final/audio-proof.json` also includes the same secret-safe Cloud Quality Profile from `eddy doctor`
+so a blocked run explains the exact credential options without exposing token values.
 
 Use `eddy audio-proof <run>` when a run already exists but Studio Sound credentials become available later. It reuses `audio/source-audio.wav`, verifies source hashes from `manifest.json`, retries Descript/Auphonic/ElevenLabs under the same cost cap, remuxes `final/video.mp4` when cloud audio passes, backs up the previous long video in `quarantine/`, and refreshes `final/audio-proof.json`, the scorecard, launch kit, and review packet. `eddy audio-proof --local-only <run>` refuses cloud audio before upload/fake-provider branches and leaves the existing proof blockers in place.
 

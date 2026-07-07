@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .cloud_quality import cloud_audio_profile
 from .receipts import Receipts
 
 PROVIDER_EVENTS = {
@@ -74,6 +75,7 @@ def summarize_audio_proof(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "strong_studio_sound": strong_studio_sound,
         "cloud_polish_proven": cloud_polish_proven,
         "quality_blockers": quality_blockers,
+        "cloud_quality_profile": {"audio": cloud_audio_profile()},
         "providers": providers,
     }
 
