@@ -1,0 +1,233 @@
+/* Liquid Glass — Apple WWDC dark-glass product cinema. A near-black keynote stage (#050507), one cool
+   Apple-system-cyan accent (#5AC8FA), and translucent glass PANELS that read as real material: a
+   backdrop blur, a specular top-lit → bottom-dark edge, and a subtle inner top highlight. Depth is
+   flat-plane — hairlines + a faint cool aurora bloom + vignette + grain — NEVER a rainbow gradient,
+   NEVER an orb field. Light-weight SF-like display (Inter Variable 200–500), mono chrome for data,
+   tabular numerals on the counter. At most two glass panels per scene; ONE finite specular sweep.
+   The one sanctioned material exception to the no-shadow doctrine: INSET specular only — no drop
+   shadows anywhere. */
+:root, #stage {
+  --ground: #050507;          /* the keynote stage — near-black */
+  --stage-bg: #050507;        /* flat; depth comes from glow layers, not a painted gradient */
+  --accent: #5AC8FA;          /* the single Apple system cyan — kicker, prompt, value, CTA edge, cursor */
+  --accent2: #2b6b86;         /* a DEEP cyan-slate (same hue family) for the faint aurora bloom only */
+  --text: #f5f7fa;            /* near-white display */
+  --muted: #868fa0;           /* cool grey chrome / output */
+  /* glass material tokens — one fill, one hairline, a top specular + a bottom-dark inset edge */
+  --glass-fill: rgba(255, 255, 255, 0.055);
+  --hairline: rgba(255, 255, 255, 0.10);
+  --glass-hi: rgba(255, 255, 255, 0.26);   /* inset top specular highlight */
+  --glass-lo: rgba(0, 0, 0, 0.38);         /* inset bottom-dark edge */
+  --glass-sheen: rgba(255, 255, 255, 0.10);/* the subtle inner top highlight (monochrome, material) */
+  --display: "Inter Variable", "Helvetica Neue", "Inter", system-ui, sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", ui-monospace, monospace;
+  --ghost-font: var(--display);
+  --vignette-color: rgba(0, 0, 0, 0.62);
+  --shimmer: rgba(255, 255, 255, 0.30);
+  --cta-glow: rgba(90, 200, 250, 0.34);
+  --scene-pad: 150px 220px;
+}
+
+/* ---- glass chrome shell (cutaway only): two ambient frosted panes + one specular sweep ---- */
+/* Depth stack, not decoration: the panes parallax faintly behind the content; the orbs are PURGED
+   (no rule → they collapse to invisible 0×0 divs); the sweep is the one gloss pass across the frost. */
+.chrome-glass .glass-pane {
+  position: absolute; border-radius: 34px;
+  background: rgba(255, 255, 255, 0.022);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(22px) saturate(120%); -webkit-backdrop-filter: blur(22px) saturate(120%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+}
+.chrome-glass .glass-pane.back { left: 300px; top: 150px; right: 260px; bottom: 190px; transform: rotate(-0.6deg); }
+.chrome-glass .glass-pane.mid  { left: 250px; top: 180px; right: 310px; bottom: 150px; transform: rotate(0.4deg); }
+.chrome-glass .glass-spec {
+  position: absolute; top: -10%; bottom: -10%; width: 280px; left: 0; transform: skewX(-16deg);
+  background: linear-gradient(90deg, transparent,
+    rgba(255, 255, 255, 0.05) 46%, rgba(255, 255, 255, 0.11) 50%, rgba(255, 255, 255, 0.05) 54%, transparent);
+}
+.chrome-glass .glass-tag {
+  position: absolute; left: 64px; bottom: 56px; padding: 9px 22px; border-radius: 999px;
+  background: var(--glass-fill); border: 1px solid var(--hairline);
+  backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+  font-family: var(--mono); font-size: 15px; letter-spacing: 0.34em; text-transform: uppercase; color: var(--muted);
+}
+/* the aurora blooms (accent-glow.aurora, painted inline by the engine) glow additively, never wash grey */
+.accent-glow.aurora { mix-blend-mode: screen; }
+
+/* ---- shared scene language: content is centered on the keynote stage, light-weight ---- */
+.scene-inner { font-family: var(--display); color: var(--text); font-weight: 400; position: relative; box-sizing: border-box; }
+.kicker { color: var(--accent); font-family: var(--mono); font-weight: 500; }
+.kicker-rule { background: var(--accent); }
+.icon-coin {
+  width: 72px; height: 72px; border-radius: 18px; color: var(--accent);
+  background: var(--glass-fill); border: 1px solid var(--hairline);
+  backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 var(--glass-lo);
+}
+.accent-rule {
+  height: 1px; width: 200px; margin-top: 30px; background: var(--accent); opacity: 0.85;
+  transform: scaleX(0); transform-origin: left center;
+}
+
+/* ---- kinetic_title — light SF display, one word lit cyan, a shimmer crosses once ---- */
+.kinetic-title { max-width: 1300px; display: flex; flex-direction: column; align-items: center; gap: 26px; }
+.kt-icon { margin-bottom: 4px; }
+.kt-line { font-weight: 300; font-size: 104px; line-height: 1.04; letter-spacing: -0.02em; color: var(--text); }
+.kt-line .w { display: inline-block; }
+.kt-line .w.alt { font-weight: 500; color: var(--accent); }
+
+/* ---- counter_scale — one calm jumbo numeral, tabular, cyan glow envelope ---- */
+.counter-scale { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.cs-num {
+  font-weight: 200; font-size: 300px; line-height: 0.86; letter-spacing: -0.045em; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.cs-label { font-size: 34px; font-weight: 400; letter-spacing: 0.01em; color: var(--text); }
+.cs-context { font-family: var(--mono); font-size: 19px; letter-spacing: 0.1em; color: var(--muted); }
+
+/* ---- device_showcase — the frosted-glass product panel (the HERO surface) ---- */
+.device-showcase .dv-window, .dv-window {
+  position: relative; width: 1200px; min-height: 540px; border-radius: 28px; overflow: hidden;
+  background: var(--glass-fill); border: 1px solid var(--hairline);
+  backdrop-filter: blur(30px) saturate(140%); -webkit-backdrop-filter: blur(30px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 var(--glass-lo);
+}
+/* the subtle inner top highlight — a monochrome material sheen, not decoration */
+.dv-window::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 46%; pointer-events: none;
+  background: linear-gradient(180deg, var(--glass-sheen), rgba(255, 255, 255, 0) 100%);
+}
+.dv-titlebar {
+  position: relative; display: flex; align-items: center; gap: 9px; padding: 18px 24px;
+  border-bottom: 1px solid var(--hairline);
+}
+.dv-title { margin-left: 14px; font-family: var(--mono); font-size: 15px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.dv-body { position: relative; padding: 34px 46px; }
+.device-content {
+  position: absolute; left: 388px; right: 388px; top: 300px; bottom: 210px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 8px; text-align: left;
+}
+.dv-kicker { font-family: var(--mono); font-size: 16px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+/* spec rows: key left, value right in cyan — the engine emits [mark]text, so the mark floats right */
+.dv-line {
+  font-family: var(--display); font-weight: 400; font-size: 34px; line-height: 1.55; color: var(--text);
+  display: flex; align-items: baseline; gap: 18px; padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.dv-line.dv-out { color: var(--muted); padding-left: 34px; font-size: 28px; border-bottom: none; }
+.dv-prompt { color: var(--accent); font-weight: 500; margin-right: 14px; }
+.dv-mark {
+  order: 2; margin-left: auto; color: var(--accent); font-family: var(--mono); font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- lower_third — a compact frosted glass pill that annotates the frame ---- */
+.lower-third {
+  display: flex; align-items: center; gap: 22px; padding: 26px 40px; border-radius: 22px;
+  background: var(--glass-fill); border: 1px solid var(--hairline);
+  backdrop-filter: blur(30px) saturate(140%); -webkit-backdrop-filter: blur(30px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 var(--glass-lo);
+}
+.lt-bar { display: none; }
+.lt-icon { display: flex; align-items: center; }
+.lt-icon .icon-coin { width: 60px; height: 60px; border-radius: 16px; }
+.lt-body { display: flex; flex-direction: column; }
+.lt-label { font-family: var(--mono); font-size: 14px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); }
+.lt-text { font-weight: 500; font-size: 34px; letter-spacing: -0.01em; color: var(--text); margin-top: 6px; }
+
+/* ---- cursor_press — the one sanctioned pop: a frosted cyan CTA the cursor tip lands ON ---- */
+.cursor-press { display: flex; flex-direction: column; align-items: center; gap: 38px; }
+.cp-lead { font-weight: 300; font-size: 96px; line-height: 1.04; letter-spacing: -0.025em; color: var(--text); }
+.cp-pill {
+  font-family: var(--display); font-weight: 500; font-size: 38px; letter-spacing: 0.01em; color: var(--text);
+  padding: 24px 62px; border-radius: 999px;
+  background: rgba(90, 200, 250, 0.16); border: 1px solid rgba(90, 200, 250, 0.55);
+  backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.30), inset 0 -1px 0 rgba(0, 0, 0, 0.32);
+}
+.cp-url { font-family: var(--mono); font-size: 23px; letter-spacing: 0.08em; color: var(--muted); }
+.cp-cursor { color: var(--text); }
+
+/* ---- additional archetypes in the same glass voice (robustness beyond the demo beats) ---- */
+.stat-callout, .big-number { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.stat-num, .bn-num { font-weight: 200; letter-spacing: -0.04em; color: var(--text); font-variant-numeric: tabular-nums; }
+.stat-num { font-size: 210px; line-height: 0.9; }
+.bn-num { font-size: 300px; line-height: 0.88; }
+.stat-num .num, .bn-num .num { color: var(--accent); }
+.stat-delta {
+  display: inline-block; margin-left: 24px; padding: 8px 18px; vertical-align: middle; border-radius: 999px;
+  background: rgba(90, 200, 250, 0.14); border: 1px solid rgba(90, 200, 250, 0.5);
+  font-family: var(--mono); font-size: 26px; font-weight: 500; color: var(--accent);
+}
+.stat-label, .bn-label { font-size: 32px; font-weight: 400; letter-spacing: 0.02em; color: var(--text); }
+.stat-context { font-family: var(--mono); font-size: 19px; letter-spacing: 0.08em; color: var(--muted); }
+.quote-card { max-width: 1240px; text-align: left; }
+.quote-mark { font-size: 140px; line-height: 0.55; color: var(--accent); font-weight: 200; }
+.quote-text { font-weight: 300; font-size: 58px; line-height: 1.26; letter-spacing: -0.01em; color: var(--text); }
+.quote-attr { display: flex; align-items: center; gap: 16px; margin-top: 30px; font-family: var(--mono); font-size: 20px; color: var(--muted); }
+.quote-avatar {
+  width: 54px; height: 54px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--glass-fill); border: 1px solid var(--hairline); color: var(--accent); font-weight: 600;
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+.quote-rule { flex: 0 0 90px; height: 1px; background: var(--hairline); }
+.terminal { width: 1180px; border-radius: 24px; overflow: hidden;
+  background: var(--glass-fill); border: 1px solid var(--hairline); text-align: left;
+  backdrop-filter: blur(30px) saturate(140%); -webkit-backdrop-filter: blur(30px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 var(--glass-lo); }
+.term-titlebar { display: flex; align-items: center; gap: 9px; padding: 16px 22px; border-bottom: 1px solid var(--hairline); }
+.term-title { margin-left: 12px; font-family: var(--mono); font-size: 15px; letter-spacing: 0.14em; color: var(--muted); }
+.term-body { padding: 30px 38px; font-family: var(--mono); font-size: 26px; line-height: 1.75; color: var(--text); }
+.term-prompt { color: var(--accent); margin-right: 14px; }
+.term-out { color: var(--muted); padding-left: 32px; }
+.social-post { min-width: 780px; max-width: 940px; text-align: left; border-radius: 26px; padding: 34px 40px;
+  background: var(--glass-fill); border: 1px solid var(--hairline);
+  backdrop-filter: blur(30px) saturate(140%); -webkit-backdrop-filter: blur(30px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 var(--glass-lo); }
+.post-head { display: flex; align-items: center; gap: 16px; }
+.post-avatar { width: 62px; height: 62px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--glass-fill); border: 1px solid rgba(90, 200, 250, 0.4); color: var(--accent); font-weight: 600; }
+.post-who { display: flex; flex-direction: column; }
+.post-name { font-weight: 600; font-size: 26px; color: var(--text); }
+.post-handle { font-family: var(--mono); font-size: 18px; color: var(--muted); }
+.post-body { font-weight: 300; font-size: 32px; line-height: 1.45; margin: 24px 0; color: var(--text); }
+.post-metrics { display: flex; gap: 44px; font-family: var(--mono); font-size: 22px; color: var(--muted); border-top: 1px solid var(--hairline); padding-top: 20px; }
+.post-metric { display: inline-flex; align-items: center; gap: 10px; }
+
+/* ---- overlay mode: one compact frosted plate in the safe zone (true alpha, same choreography) ---- */
+.mode-overlay .scene-inner {
+  background: var(--glass-fill); border: 1px solid var(--hairline); border-radius: 22px; padding: 34px 40px;
+  backdrop-filter: blur(30px) saturate(140%); -webkit-backdrop-filter: blur(30px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 var(--glass-lo);
+}
+/* archetypes that carry their own glass surface don't get the generic plate */
+.mode-overlay .scene-inner.device-showcase, .mode-overlay .scene-inner.lower-third {
+  background: none; border: none; box-shadow: none; padding: 0;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.mode-overlay .scene-inner.device-content { position: static; left: auto; right: auto; top: auto; bottom: auto; }
+.mode-overlay .kinetic-title, .mode-overlay .counter-scale, .mode-overlay .cursor-press { align-items: flex-start; }
+.mode-overlay .accent-rule { margin: 22px 0 0; }
+.mode-overlay .kt-line { font-size: 48px; }
+.mode-overlay .cs-num { font-size: 128px; }
+.mode-overlay .cs-label { font-size: 21px; }
+.mode-overlay .cs-context { font-size: 16px; }
+.mode-overlay .dv-window { width: auto; min-height: 0; max-width: 560px; }
+.mode-overlay .dv-body { padding: 24px 28px; }
+.mode-overlay .dv-kicker { font-size: 13px; margin-bottom: 12px; }
+.mode-overlay .dv-line { font-size: 21px; padding: 9px 0; }
+.mode-overlay .dv-line.dv-out { font-size: 19px; }
+.mode-overlay .lt-text { font-size: 28px; }
+.mode-overlay .lt-icon .icon-coin { width: 52px; height: 52px; }
+.mode-overlay .cp-lead { font-size: 46px; }
+.mode-overlay .cp-pill { font-size: 26px; padding: 16px 42px; }
+.mode-overlay .cp-url { font-size: 17px; }
+.mode-overlay .stat-num { font-size: 112px; }
+.mode-overlay .bn-num { font-size: 128px; }
+.mode-overlay .stat-label, .mode-overlay .bn-label { font-size: 23px; }
+.mode-overlay .quote-text { font-size: 32px; }
+.mode-overlay .terminal, .mode-overlay .social-post { min-width: 0; max-width: 560px; }
+.mode-overlay .term-body { font-size: 21px; }
+.mode-overlay .post-body { font-size: 24px; }
+.mode-overlay .scene-mascot { width: 96px; right: -18px; bottom: -18px; }

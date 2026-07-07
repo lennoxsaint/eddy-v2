@@ -1,0 +1,29 @@
+{
+  "identity": "code-cinema",
+  "overlay_native_blocks": {
+    "code_snippet": "code-snippet-dark-modern"
+  },
+  "cutaway_blocks": {
+    "code_diff": {
+      "block": "code-diff",
+      "when": "showing a real before/after change to code or config",
+      "palette": {"bg": "#0a0e14", "accent": "#43d17a"}
+    },
+    "code_typing": {
+      "block": "code-typing",
+      "when": "a command or snippet being typed in a terminal",
+      "palette": {"bg": "#0a0e14", "accent": "#43d17a"}
+    },
+    "code_workbench": {
+      "block": "code-snippet-dark-modern",
+      "when": "a full VS Code file view of the code being discussed",
+      "palette": {"bg": "#0d1117"}
+    },
+    "code_morph": {
+      "block": "code-morph",
+      "when": "one snippet transforming into another (Shiki magic-move)",
+      "palette": {"bg": "#0a0e14", "accent": "#43d17a"}
+    }
+  },
+  "notes": "Cutaway blocks are installed via `hyperframes add`, data-patched with the real code from the transcript/screen, recoloured to the identity ground, and rendered full-frame opaque. Overlay scenes are bespoke IDE panels (see identity.css)."
+}

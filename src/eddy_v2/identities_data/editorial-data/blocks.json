@@ -1,0 +1,22 @@
+{
+  "identity": "editorial-data",
+  "overlay_native_blocks": {},
+  "cutaway_blocks": {
+    "data_chart": {
+      "block": "data-chart",
+      "when": "an animated bar or line chart of real numbers from the script",
+      "palette": {"bg": "#f4f1ea", "ink": "#1b1712", "accent": "#c1432c"}
+    },
+    "us_map": {
+      "block": "us-map",
+      "when": "a geographic breakdown by US state",
+      "palette": {"bg": "#f4f1ea", "accent": "#c1432c"}
+    },
+    "world_map": {
+      "block": "world-map",
+      "when": "a global / country-level breakdown",
+      "palette": {"bg": "#f4f1ea", "accent": "#c1432c"}
+    }
+  },
+  "notes": "Cutaway blocks are installed via `hyperframes add`, data-patched with the script's numbers, recoloured ink-on-cream, rendered full-frame opaque. Prefer the bespoke SVG metric_bars for small comparisons; use data-chart for time series."
+}

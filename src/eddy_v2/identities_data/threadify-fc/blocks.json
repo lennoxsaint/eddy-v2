@@ -1,0 +1,12 @@
+{
+  "identity": "threadify-fc",
+  "overlay_native_blocks": {},
+  "cutaway_blocks": {
+    "data_chart": {
+      "block": "data-chart",
+      "when": "an animated chart of real numbers from the script, in the dark register",
+      "palette": {"bg": "#0a0a0a", "ink": "#fafafa", "accent": "#FF0000"}
+    }
+  },
+  "notes": "The gold-standard identity leans on its signature archetypes (strike_swap, receipt_print, device_showcase + card_handoff, counter_scale, cursor_press) rather than external blocks. FWED appears at most once per render via data.mascot; the needle mark lives in the brand chrome and morph_cta."
+}

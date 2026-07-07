@@ -1,0 +1,25 @@
+{
+  "identity": "broadcast-receipts",
+  "overlay_native_blocks": {
+    "yt_lower_third": "yt-lower-third",
+    "notification": "macos-notification"
+  },
+  "cutaway_blocks": {
+    "x_post": {
+      "block": "x-post",
+      "when": "showing a real X/Twitter post (the receipt, the plagiarist's post, the reply)",
+      "palette": {"accent": "#2f6bff"}
+    },
+    "reddit_post": {
+      "block": "reddit-post",
+      "when": "showing a real Reddit post/comment thread",
+      "palette": {}
+    },
+    "spotify_card": {
+      "block": "spotify-card",
+      "when": "a podcast/track now-playing moment",
+      "palette": {}
+    }
+  },
+  "notes": "Overlay-native blocks (yt-lower-third, macos-notification) render transparent-body alpha and composite directly. Post-card blocks are data-patched with the REAL post text/handle (never fabricated) and rendered full-frame opaque as the receipt. Bespoke broadcast lower-thirds cover the rest."
+}

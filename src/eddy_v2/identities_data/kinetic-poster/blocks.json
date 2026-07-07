@@ -1,0 +1,12 @@
+{
+  "identity": "kinetic-poster",
+  "overlay_native_blocks": {},
+  "cutaway_blocks": {
+    "money_count": {
+      "block": "apple-money-count",
+      "when": "one big number bursting up (revenue, count, saving)",
+      "palette": {"bg": "#0d0d0f", "accent": "#FF2D2D"}
+    }
+  },
+  "notes": "apple-money-count is data-patched to the script's real number (edit the target literal) and recoloured, rendered full-frame opaque. Most Kinetic Poster beats are bespoke slabs/count-ups (see identity.css) — the block is for the single hero number."
+}

@@ -1,0 +1,342 @@
+/* Broadcast Receipts — creator social-proof newsroom. Two hero surfaces: thermal RECEIPTS that
+   print on cream paper (perforated teeth, dashed rules, a drawn red underline under the figure,
+   a "RECEIPTS . NOT PROMISES" foot) and credible platform POST cards (avatar, @handle, body,
+   like/repost/view metrics). Everything sits in a dark newsroom stage under a live broadcast
+   package (bug + ticking clock + data ticker). Flat plane: 1px hairlines + one accent-red radial
+   glow + vignette + grain. ONE broadcast red (#e5372f) lights the verdict, the underline, the
+   kickers. Montserrat display + IBM Plex Mono chrome. No box-shadows, no rainbow gradients, no
+   orbs, no conic, no hue-rotate, no --veil-bg. */
+:root, #stage {
+  --ground: #0d0d0f;          /* the dark newsroom stage */
+  --panel: #17171a;           /* post cards, lower-thirds, chrome plates */
+  --panel-edge: #2a2a2e;      /* the one hairline */
+  --accent: #e5372f;          /* the single broadcast red — verdict, underline, kicker, ticks */
+  --text: #f3f1ec;            /* newsroom foreground */
+  --muted: #8a8781;           /* metadata / chrome grey */
+  --paper: #fdfaf1;           /* thermal receipt cream */
+  --ink: #16140f;             /* receipt ink */
+  --ink-soft: rgba(22, 20, 15, 0.74);
+  --ink-faint: rgba(22, 20, 15, 0.5);
+  --dash: rgba(22, 20, 15, 0.3);
+  --display: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --ghost-font: var(--display);
+  --vignette-color: rgba(0, 0, 0, 0.62);
+  --shimmer: rgba(255, 255, 255, 0.14);
+  --cta-glow: rgba(229, 55, 47, 0.4);
+  /* clear the bug/clock band up top and the ticker band down low */
+  --scene-pad: 150px 200px 200px 200px;
+}
+
+/* ---- broadcast chrome: the produced package — bug, ticking clock, hairline frameline, data ticker ---- */
+.chrome-broadcast .bc-bug {
+  position: absolute; left: 60px; top: 46px;
+  display: flex; align-items: center; gap: 13px; padding: 12px 22px;
+  background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 8px;
+  font-family: var(--mono); font-size: 18px; font-weight: 600; letter-spacing: 0.24em;
+  text-transform: uppercase; color: var(--text);
+}
+.chrome-broadcast .bug-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); }
+.chrome-broadcast .bc-clock {
+  position: absolute; right: 60px; top: 46px; padding: 12px 20px;
+  background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 8px;
+  font-family: var(--mono); font-size: 21px; letter-spacing: 0.14em; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.chrome-broadcast .bc-frameline {
+  position: absolute; left: 60px; right: 60px; top: 112px; height: 1px;
+  background: linear-gradient(90deg, var(--accent) 0, var(--accent) 96px, var(--panel-edge) 96px);
+}
+.chrome-broadcast .bc-ticker {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 76px;
+  display: flex; align-items: stretch;
+  background: #0a0a0c; border-top: 2px solid var(--accent);
+}
+.chrome-broadcast .bc-ticker-tag {
+  display: flex; align-items: center; padding: 0 30px;
+  background: var(--accent); color: #fdfaf1;
+  font-family: var(--mono); font-size: 19px; font-weight: 700; letter-spacing: 0.26em;
+}
+.chrome-broadcast .ticker-viewport { flex: 1; display: flex; align-items: center; }
+.chrome-broadcast .ticker-track {
+  gap: 88px; padding-left: 40px;
+  font-family: var(--mono); font-size: 21px; letter-spacing: 0.12em; color: var(--muted);
+}
+.amb-vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, transparent 50%, var(--vignette-color) 100%);
+}
+
+/* ---- shared scene language: transparent stage, hairlines carry every edge ---- */
+.scene-inner { font-family: var(--display); color: var(--text); position: relative; box-sizing: border-box; }
+.kicker { color: var(--accent); font-family: var(--mono); font-weight: 700; }
+.kicker-rule { background: var(--accent); }
+.accent-rule { height: 2px; width: 190px; margin-top: 26px; background: var(--accent);
+  transform: scaleX(0); transform-origin: left center; }
+.icon-coin { width: 66px; height: 66px; border-radius: 12px;
+  border: 1px solid var(--panel-edge); background: var(--panel); }
+
+/* ---- kinetic title / type slam: newsroom display, one word lit red ---- */
+.kinetic-title { max-width: 1300px; display: flex; flex-direction: column; gap: 20px; }
+.kt-line { font-weight: 800; font-size: 100px; line-height: 1.02; letter-spacing: -0.025em; }
+.kt-line .w { display: inline-block; }
+.kt-line .w.alt { color: var(--accent); }
+.type-slam { max-width: 1360px; display: flex; flex-direction: column; gap: 22px; }
+.slam-line { font-weight: 800; font-size: 108px; line-height: 0.98; letter-spacing: -0.03em; color: var(--text); }
+.slam-key { color: var(--accent); }
+
+/* ---- strike swap: old claim struck in red, verdict swaps in ---- */
+.strike-swap { max-width: 1380px; display: flex; flex-direction: column; gap: 24px; }
+.ss-line { font-weight: 800; font-size: 100px; line-height: 1.0; letter-spacing: -0.028em; color: var(--text); }
+.ss-from { color: var(--muted); }
+.ss-to { color: var(--accent); }
+.ss-strike { background: var(--accent); height: 0.08em; }
+.ss-mark { font-size: 0.4em; color: var(--accent); }
+.ss-x { color: var(--muted); }
+.ss-check { color: var(--accent); }
+
+/* ---- counter scale: the tally figure, red, tabular ---- */
+.counter-scale { display: flex; flex-direction: column; gap: 16px; }
+.cs-num { font-weight: 800; font-size: 224px; line-height: 0.9; letter-spacing: -0.035em;
+  color: var(--accent); font-variant-numeric: tabular-nums; }
+.cs-label { font-size: 30px; letter-spacing: 0.16em; text-transform: uppercase;
+  font-family: var(--mono); color: var(--text); }
+.cs-context { font-family: var(--mono); font-size: 20px; color: var(--muted); }
+
+/* ---- stat / big number (legacy kinds share the voice) ---- */
+.stat-callout, .big-number { display: flex; flex-direction: column; gap: 16px; }
+.stat-num, .bn-num { font-weight: 800; font-size: 200px; line-height: 0.92; letter-spacing: -0.035em;
+  color: var(--text); font-variant-numeric: tabular-nums; }
+.bn-num { font-size: 268px; color: var(--accent); }
+.stat-num .num { color: var(--accent); }
+.stat-delta { display: inline-block; margin-left: 20px; padding: 7px 16px; vertical-align: middle;
+  border: 1px solid var(--accent); border-radius: 999px;
+  font-family: var(--mono); font-size: 24px; font-weight: 700; color: var(--accent); }
+.stat-label, .bn-label { font-size: 30px; letter-spacing: 0.06em; font-weight: 600; color: var(--text); }
+.stat-context { font-family: var(--mono); font-size: 20px; color: var(--muted); }
+
+/* ---- receipt print: thermal cream paper, perforated teeth, drawn red underline ---- */
+.receipt-print { display: flex; flex-direction: column; gap: 26px; align-items: center; }
+.rc-card { width: 560px; }
+.rc-paper {
+  background: var(--paper); color: var(--ink); padding: 40px 44px 36px; text-align: left;
+  clip-path: polygon(0 0, 100% 0, 100% 97%, 95% 100%, 90% 97%, 85% 100%, 80% 97%, 75% 100%,
+    70% 97%, 65% 100%, 60% 97%, 55% 100%, 50% 97%, 45% 100%, 40% 97%, 35% 100%, 30% 97%,
+    25% 100%, 20% 97%, 15% 100%, 10% 97%, 5% 100%, 0 97%);
+}
+.rc-head { font-family: var(--mono); font-size: 19px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--ink); font-weight: 600; }
+.rc-dash { border-top: 2px dashed var(--dash); margin: 18px 0; }
+.rc-stat { font-family: var(--mono); font-weight: 700; font-size: 84px; line-height: 1;
+  letter-spacing: -0.03em; color: var(--ink); }
+.rc-row { font-family: var(--mono); font-size: 21px; line-height: 1.85; color: var(--ink-soft); }
+.rc-foot { font-family: var(--mono); font-size: 15px; letter-spacing: 0.22em; color: var(--ink-faint); }
+.rc-ul { background: var(--accent); }
+
+/* ---- social post: credible platform card (avatar, @handle, body, metrics) ---- */
+.social-post { min-width: 800px; max-width: 980px; background: var(--panel);
+  border: 1px solid var(--panel-edge); border-radius: 18px; padding: 34px 40px; text-align: left; }
+.post-head { display: flex; align-items: center; gap: 16px; }
+.post-avatar { width: 66px; height: 66px; border-radius: 50%; flex: 0 0 66px;
+  background: #0a0a0c; border: 1px solid var(--panel-edge);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-weight: 700; font-size: 24px; color: var(--accent); }
+.post-who { display: flex; flex-direction: column; }
+.post-name { font-weight: 700; font-size: 28px; color: var(--text); }
+.post-handle { font-family: var(--mono); font-size: 19px; color: var(--muted); }
+.post-badge { margin-left: auto; color: var(--accent); display: inline-flex; }
+.post-body { font-size: 36px; line-height: 1.4; font-weight: 500; margin: 24px 0; color: var(--text); }
+.post-metrics { display: flex; gap: 46px; font-family: var(--mono); font-size: 24px;
+  color: var(--muted); border-top: 1px solid var(--panel-edge); padding-top: 22px; }
+.post-metric { display: inline-flex; align-items: center; gap: 11px; }
+.post-metric .num { color: var(--text); }
+
+/* ---- ledger: the match list that fills up ---- */
+.ledger { display: flex; flex-direction: column; gap: 24px; max-width: 1080px; }
+.lg-head { font-weight: 800; font-size: 60px; letter-spacing: -0.025em; color: var(--text); }
+.lg-rows { display: flex; flex-direction: column; gap: 16px; }
+.lg-row { font-family: var(--mono); font-size: 28px; color: var(--text);
+  border-bottom: 1px solid var(--panel-edge); padding-bottom: 14px; }
+.lg-tick { color: var(--accent); }
+.lg-text { color: var(--text); }
+.lg-val { margin-left: auto; color: var(--accent); font-weight: 700; }
+
+/* ---- lower third: TV lower-third confidence ---- */
+.lower-third { display: flex; align-items: center; gap: 22px; background: var(--panel);
+  border: 1px solid var(--panel-edge); border-left: 4px solid var(--accent);
+  border-radius: 12px; padding: 24px 32px; }
+.lt-bar { display: none; }
+.lt-icon { display: inline-flex; align-items: center; color: var(--accent); }
+.lt-body { display: flex; flex-direction: column; }
+.lt-label { font-family: var(--mono); font-size: 16px; letter-spacing: 0.24em;
+  text-transform: uppercase; color: var(--accent); }
+.lt-text { font-weight: 700; font-size: 36px; letter-spacing: -0.01em; color: var(--text); margin-top: 5px; }
+
+/* ---- device / terminal (data-readout window, hairlines not shadows) ---- */
+.surf-terminal .surf-window, .dv-window {
+  position: absolute; left: 300px; right: 300px; top: 200px; bottom: 180px;
+  background: #101013; border: 1px solid var(--panel-edge); border-radius: 16px; overflow: hidden;
+}
+.dv-window { position: relative; inset: auto; width: 1200px; min-height: 540px; }
+.surf-titlebar, .dv-titlebar { display: flex; align-items: center; gap: 9px; padding: 16px 22px;
+  background: var(--panel); border-bottom: 1px solid var(--panel-edge); }
+.surf-title, .dv-title { margin-left: 12px; font-family: var(--mono); font-size: 15px;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.surf-body, .dv-body { padding: 32px 42px; }
+.device-content { position: absolute; left: 366px; right: 366px; top: 300px; bottom: 230px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+  gap: 8px; text-align: left; }
+.dv-kicker { font-family: var(--mono); font-size: 18px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+.dv-line { font-family: var(--mono); font-size: 30px; line-height: 1.7; color: var(--text); }
+.dv-line.dv-out { color: var(--muted); padding-left: 38px; font-size: 27px; }
+.dv-prompt { color: var(--accent); font-weight: 700; margin-right: 16px; }
+.dv-mark { color: var(--accent); margin-right: 14px; }
+
+/* ---- card handoff: an evidence card flies INTO the readout window ---- */
+.card-handoff { display: flex; flex-direction: column; gap: 28px; }
+.ch-stage { width: 1360px; }
+.ch-card { width: 430px; background: var(--paper); color: var(--ink); border-radius: 12px;
+  padding: 28px 30px; text-align: left; }
+.ch-card-title { font-family: var(--mono); font-size: 16px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--accent); }
+.ch-card-rule { height: 2px; width: 58px; background: var(--accent); margin: 13px 0 15px; }
+.ch-card-body { font-family: var(--mono); font-weight: 500; font-size: 25px; line-height: 1.35; color: var(--ink); }
+.ch-panel { flex: 1; background: #101013; border: 1px solid var(--panel-edge); border-radius: 16px;
+  overflow: hidden; text-align: left; }
+.ch-panel-head { display: flex; align-items: center; gap: 12px; padding: 16px 24px;
+  background: var(--panel); border-bottom: 1px solid var(--panel-edge); }
+.ch-panel-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.ch-panel-title { font-family: var(--mono); font-size: 15px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--muted); }
+.ch-panel-body { padding: 26px 30px; display: flex; flex-direction: column; gap: 16px; }
+.ch-runline { font-family: var(--mono); font-size: 24px; color: var(--muted); }
+.ch-spinner { color: var(--accent); }
+.ch-result { font-family: var(--mono); font-size: 25px; color: var(--text); }
+.ch-result-mark { color: var(--accent); }
+
+/* ---- cursor press CTA (cursor tip lands ON the pill — base_css owns its position) ---- */
+.cursor-press { display: flex; flex-direction: column; gap: 32px; align-items: center; }
+.cp-lead { font-weight: 800; font-size: 96px; line-height: 1.0; letter-spacing: -0.03em; color: var(--text); }
+.cp-pill { background: var(--accent); color: #fdfaf1; font-weight: 800; font-size: 38px;
+  letter-spacing: 0.01em; padding: 24px 62px; border-radius: 999px; }
+.cp-url { font-family: var(--mono); font-size: 23px; letter-spacing: 0.09em; color: var(--muted); }
+.cp-cursor { color: var(--text); }
+
+/* ---- morph CTA ---- */
+.morph-cta { display: flex; flex-direction: column; gap: 26px; align-items: center; }
+.mc-mark-img { width: 180px; height: 180px; object-fit: contain; }
+.mc-mark-glyph { font-weight: 800; font-size: 128px; color: var(--accent); }
+.mc-new { background: var(--accent); color: #fdfaf1; font-weight: 800; font-size: 36px;
+  padding: 24px 58px; border-radius: 999px; }
+.mc-url { font-family: var(--mono); font-size: 23px; color: var(--muted); }
+
+/* ---- quote card ---- */
+.quote-card { max-width: 1140px; text-align: left; }
+.quote-mark { font-size: 130px; line-height: 0.6; color: var(--accent); font-weight: 800; }
+.quote-text { font-weight: 700; font-size: 52px; line-height: 1.26; letter-spacing: -0.015em; color: var(--text); }
+.quote-attr { display: flex; align-items: center; gap: 16px; margin-top: 30px;
+  font-family: var(--mono); font-size: 20px; color: var(--muted); }
+.quote-avatar { width: 54px; height: 54px; border-radius: 50%; background: var(--panel);
+  border: 1px solid var(--panel-edge); display: inline-flex; align-items: center;
+  justify-content: center; color: var(--accent); font-weight: 700; }
+.quote-rule { flex: 0 0 90px; height: 1px; background: var(--panel-edge); }
+
+/* ---- panel takeover / process flow / metric bars (in the newsroom voice) ---- */
+.panel-head { display: flex; align-items: baseline; gap: 22px;
+  border-bottom: 1px solid var(--panel-edge); padding-bottom: 16px; margin-bottom: 28px; }
+.panel-title, .takeover-title { font-weight: 800; font-size: 22px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--accent); }
+.panel-count, .panel-unit, .panel-foot { font-family: var(--mono); font-size: 16px;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.panel-takeover, .metric-bars, .process-flow { width: 1180px; text-align: left; }
+.takeover-item { display: flex; align-items: center; gap: 22px; margin: 22px 0; font-size: 38px;
+  font-weight: 700; color: var(--text); }
+.takeover-tick { width: 6px; height: 40px; border-radius: 2px; background: var(--accent); }
+.takeover-index { width: 54px; height: 54px; flex: 0 0 54px; display: flex; align-items: center;
+  justify-content: center; border: 1px solid var(--panel-edge); border-radius: 10px;
+  font-family: var(--mono); font-size: 22px; color: var(--accent); }
+.takeover-copy { display: flex; flex-direction: column; }
+.takeover-sub { font-family: var(--mono); font-size: 19px; color: var(--muted); font-weight: 400; margin-top: 3px; }
+.svg-bar-val { font-family: var(--mono); font-size: 25px; font-weight: 700; }
+.svg-bar-lab { font-family: var(--mono); font-size: 19px; letter-spacing: 0.1em; }
+.flow-row { display: flex; align-items: center; gap: 18px; }
+.flow-step { display: flex; align-items: center; gap: 16px; }
+.flow-node { position: relative; width: 74px; height: 74px; flex: 0 0 74px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--panel-edge);
+  display: flex; align-items: center; justify-content: center; }
+.flow-badge { position: absolute; top: -9px; right: -9px; font-family: var(--mono); font-size: 13px; color: var(--accent); }
+.flow-index { font-family: var(--mono); color: var(--accent); font-size: 24px; }
+.flow-text { font-weight: 700; font-size: 27px; color: var(--text); }
+.flow-sub { font-family: var(--mono); font-size: 17px; color: var(--muted); }
+.flow-conn { transform: rotate(-90deg); color: var(--panel-edge); }
+
+/* ---- terminal (legacy standalone kind, same readout language) ---- */
+.terminal { width: 1180px; background: #101013; border: 1px solid var(--panel-edge);
+  border-radius: 16px; overflow: hidden; text-align: left; }
+.term-titlebar { display: flex; align-items: center; gap: 9px; padding: 15px 20px;
+  background: var(--panel); border-bottom: 1px solid var(--panel-edge); }
+.term-title { margin-left: 12px; font-family: var(--mono); font-size: 15px;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.term-body { padding: 28px 36px; font-family: var(--mono); font-size: 26px; line-height: 1.75; }
+.term-prompt { color: var(--accent); font-weight: 700; margin-right: 14px; }
+.term-cmd { color: var(--text); }
+.term-out { color: var(--muted); padding-left: 32px; }
+.term-caret { background: var(--accent); }
+
+/* ---- icon callout (flat: hairline halo + radial glow, no shadow, no orbit dot) ---- */
+.icon-callout { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.ico-stage { position: relative; width: 210px; height: 210px; display: flex;
+  align-items: center; justify-content: center; }
+.ico-halo { position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--panel-edge);
+  background: radial-gradient(closest-side, rgba(229, 55, 47, 0.16), transparent 74%); }
+.ico-orbit { position: absolute; inset: -16px; border-radius: 50%;
+  border: 1px dashed rgba(229, 55, 47, 0.32); }
+.ico-big .hf-icon { width: 112px; height: 112px; }
+.ico-text { font-weight: 800; font-size: 54px; letter-spacing: -0.02em; color: var(--text); }
+.ico-label { font-family: var(--mono); font-size: 20px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--accent); }
+.hf-block { width: 1220px; text-align: left; }
+
+/* ---- overlay mode: compact newsroom plates in the safe zone, true alpha, same choreography ---- */
+.mode-overlay .scene-inner { background: rgba(13, 13, 15, 0.92); border: 1px solid var(--panel-edge);
+  border-radius: 14px; padding: 30px 36px; }
+/* surfaces that carry their own material don't get the generic plate */
+.mode-overlay .scene-inner.receipt-print,
+.mode-overlay .scene-inner.social-post,
+.mode-overlay .scene-inner.lower-third,
+.mode-overlay .scene-inner.ledger { background: none; border: none; padding: 0; }
+.mode-overlay .scene-inner.device-content { position: static; }
+.mode-overlay .kt-line { font-size: 46px; }
+.mode-overlay .slam-line { font-size: 50px; }
+.mode-overlay .ss-line { font-size: 44px; }
+.mode-overlay .cs-num { font-size: 118px; }
+.mode-overlay .cs-label { font-size: 20px; }
+.mode-overlay .stat-num, .mode-overlay .bn-num { font-size: 106px; }
+.mode-overlay .stat-label, .mode-overlay .bn-label { font-size: 22px; }
+.mode-overlay .rc-card { width: 440px; }
+.mode-overlay .rc-stat { font-size: 58px; }
+.mode-overlay .rc-row { font-size: 18px; }
+.mode-overlay .social-post { min-width: 0; max-width: 560px; padding: 26px 30px; }
+.mode-overlay .post-body { font-size: 26px; }
+.mode-overlay .post-metrics { gap: 30px; font-size: 20px; }
+.mode-overlay .lg-head { font-size: 38px; }
+.mode-overlay .lg-row { font-size: 21px; }
+.mode-overlay .lower-third { padding: 22px 28px; }
+.mode-overlay .lt-text { font-size: 30px; }
+.mode-overlay .quote-text { font-size: 32px; }
+.mode-overlay .cp-lead { font-size: 46px; }
+.mode-overlay .cp-pill { font-size: 26px; padding: 16px 42px; }
+.mode-overlay .cp-url { font-size: 17px; }
+.mode-overlay .ch-stage { width: auto; flex-direction: column; }
+.mode-overlay .ch-card { width: auto; max-width: 520px; }
+.mode-overlay .dv-window { width: auto; min-height: 0; max-width: 560px; }
+.mode-overlay .dv-line { font-size: 20px; }
+.mode-overlay .takeover-item { font-size: 27px; margin: 15px 0; }
+.mode-overlay .takeover-title { font-size: 17px; }
+.mode-overlay .term-body { font-size: 22px; padding: 20px 24px; }
+.mode-overlay .terminal { width: auto; max-width: 560px; }
+.mode-overlay .ico-stage { width: 132px; height: 132px; }
+.mode-overlay .ico-big .hf-icon { width: 74px; height: 74px; }
+.mode-overlay .ico-text { font-size: 32px; }
+.mode-overlay .scene-mascot { width: 96px; right: -18px; bottom: -18px; }

@@ -1,0 +1,20 @@
+{
+  "identity": "liquid-glass",
+  "overlay_native_blocks": {
+    "glass_widget": "liquid-glass-widgets",
+    "glass_notification": "liquid-glass-notification"
+  },
+  "cutaway_blocks": {
+    "iphone_device": {
+      "block": "vfx-iphone-device",
+      "when": "showing an app or site on a real device (heavy WebGL/GLTF — cutaway only, capability-gated)",
+      "palette": {"bg": "#0a0a14"}
+    },
+    "ios_home": {
+      "block": "ios26-liquid-glass",
+      "when": "an iOS home-screen / liquid-glass showcase (heavy WebGL)",
+      "palette": {"bg": "#0a0a14"}
+    }
+  },
+  "notes": "Heavy WebGL/GLTF device blocks are cutaway-only and capability-gated (render with --no-browser-gpu falls back to CSS/SVG if too slow on a fragile box). Most Liquid Glass beats are bespoke frosted plates over the aurora ground (see identity.css)."
+}

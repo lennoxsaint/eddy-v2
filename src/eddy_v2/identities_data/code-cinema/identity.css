@@ -1,0 +1,285 @@
+/* Code Cinema — IDE-native motion skin. The code IS the subject: a pixel-credible VS Code / terminal
+   world. #1e1e1e editor on a #161616 stage, #252526 panels, #d4d4d4 chrome, #333 hairlines, ONE VS
+   Code blue accent (#4fc1ff) for prompts / kickers / CTA. Disciplined syntax-token colors live ONLY
+   inside code/terminal surfaces (realism, not decoration). Flat plane: 1px hairlines + radial glow +
+   scanlines + grain. No box-shadows, no rainbow gradients, no orbs, no hue-rotate. JetBrains Mono is
+   display AND body — the monoculture is the identity. */
+:root, #stage {
+  --ground: #161616;          /* the stage behind the editor */
+  --editor: #1e1e1e;          /* the editor / terminal surface */
+  --panel: #252526;           /* titlebars, tabbar, chips */
+  --panel-edge: #333333;      /* the one hairline */
+  --accent: #4fc1ff;          /* the single VS Code blue — prompt, kicker, CTA, cursor */
+  --text: #d4d4d4;            /* editor foreground */
+  --muted: #808080;           /* comments-grey chrome / output */
+  /* syntax tokens — legible ONLY inside a code/terminal surface (VS Code Dark+ palette) */
+  --kw: #569cd6;              /* keyword blue */
+  --str: #ce9178;             /* string / config-value */
+  --cmt: #6a9955;             /* comment green — success ticks */
+  --num: #b5cea8;             /* number green */
+  --fn: #dcdcaa;              /* function / filename yellow */
+  --mono: "JetBrains Mono", "Source Code Pro", ui-monospace, monospace;
+  --ghost-font: var(--mono);
+  --vignette-color: rgba(0, 0, 0, 0.55);
+  --shimmer: rgba(255, 255, 255, 0.12);
+  --cta-glow: rgba(79, 193, 255, 0.34);
+  /* scenes sit in the editor viewport: clear gutter / tabs / minimap / statusbar */
+  --scene-pad: 200px 330px 170px 310px;
+}
+
+/* ---- IDE chrome shell (cutaway environment — hairlines, never shadows) ---- */
+.chrome-ide .ide-window {
+  position: absolute; inset: 34px 40px 40px 40px;
+  background: var(--editor); border: 1px solid var(--panel-edge); border-radius: 14px; overflow: hidden;
+}
+.chrome-ide .ide-titlebar {
+  position: absolute; left: 0; right: 0; top: 0; height: 46px;
+  display: flex; align-items: center; gap: 8px; padding: 0 22px;
+  background: var(--panel); border-bottom: 1px solid var(--panel-edge);
+  font-family: var(--mono); font-size: 14px; color: var(--muted);
+}
+.chrome-ide .ide-title { margin-left: 14px; letter-spacing: 0.08em; }
+.chrome-ide .ide-tabbar {
+  position: absolute; left: 0; right: 0; top: 46px; height: 42px;
+  display: flex; align-items: stretch; padding: 0 12px;
+  background: var(--ground); border-bottom: 1px solid var(--panel-edge);
+  font-family: var(--mono); font-size: 14px;
+}
+.chrome-ide .ide-tab {
+  display: flex; align-items: center; padding: 0 22px; color: var(--muted);
+  border-right: 1px solid var(--panel-edge);
+}
+.chrome-ide .ide-tab.active {
+  color: var(--text); background: var(--editor); border-bottom: 2px solid var(--accent);
+}
+.chrome-ide .ide-gutter {
+  position: absolute; left: 0; top: 88px; bottom: 40px; width: 64px;
+  display: flex; flex-direction: column; gap: 9px; padding-top: 26px;
+  border-right: 1px solid var(--panel-edge);
+  font-family: var(--mono); font-size: 14px; color: var(--muted); opacity: 0.5; text-align: right;
+}
+.chrome-ide .ide-gutter span { padding-right: 16px; }
+.chrome-ide .ide-minimap {
+  position: absolute; right: 0; top: 88px; bottom: 40px; width: 58px;
+  display: flex; flex-direction: column; gap: 12px; padding: 24px 10px 0 10px;
+  border-left: 1px solid var(--panel-edge); opacity: 0.5;
+}
+.chrome-ide .ide-minimap i { display: block; height: 4px; border-radius: 2px; background: var(--muted); opacity: 0.5; }
+.chrome-ide .ide-minimap i:nth-child(3n) { background: var(--kw); opacity: 0.55; }
+.chrome-ide .ide-minimap i:nth-child(5n) { background: var(--str); opacity: 0.45; }
+.chrome-ide .ide-statusbar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 40px;
+  display: flex; align-items: center; gap: 26px; padding: 0 24px;
+  background: var(--panel); border-top: 1px solid var(--panel-edge);
+  font-family: var(--mono); font-size: 13px; color: var(--muted); letter-spacing: 0.06em;
+}
+.chrome-ide .sb-accent { color: var(--accent); }
+.chrome-ide .sb-dot { margin-left: auto; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+.chrome-ide .ide-codeghost {
+  position: absolute; left: 96px; top: 118px; right: 90px; bottom: 70px;
+  display: flex; flex-direction: column; gap: 22px; overflow: hidden; opacity: 0.5;
+}
+.chrome-ide .ide-codeghost i { display: block; height: 12px; border-radius: 6px; background: var(--muted); opacity: 0.09; }
+.chrome-ide .ide-codeghost i:nth-child(4n) { background: var(--kw); opacity: 0.08; }
+.chrome-ide .ide-codeghost i:nth-child(7n) { background: var(--fn); opacity: 0.07; }
+.amb-scanlines {
+  position: absolute; inset: 0; opacity: 0.05;
+  background: repeating-linear-gradient(0deg, transparent 0 3px, #000 3px 4px);
+}
+
+/* ---- shared scene language: content composes like code — left-aligned in the editor ---- */
+.scene { align-items: flex-start; text-align: left; }
+.scene-inner { font-family: var(--mono); color: var(--text); position: relative; box-sizing: border-box; }
+.kicker { color: var(--accent); font-family: var(--mono); font-weight: 700; }
+.kicker-rule { background: var(--accent); }
+.icon-coin { width: 66px; height: 66px; border-radius: 12px; background: var(--panel); border: 1px solid var(--panel-edge); }
+.accent-rule {
+  height: 2px; width: 150px; margin-top: 24px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  transform: scaleX(0); transform-origin: left center;
+}
+
+/* ---- device_showcase — the persistent terminal is the HERO (surf run) ---- */
+.surf-terminal .surf-window {
+  position: absolute; left: 330px; right: 330px; top: 220px; bottom: 150px;
+  background: var(--editor); border: 1px solid var(--panel-edge); border-radius: 14px; overflow: hidden;
+}
+/* free-standing / overlay device: its own inline window */
+.device-showcase .dv-window, .dv-window {
+  position: relative; width: 1180px; min-height: 520px;
+  background: var(--editor); border: 1px solid var(--panel-edge); border-radius: 12px; overflow: hidden;
+}
+.surf-titlebar, .dv-titlebar {
+  display: flex; align-items: center; gap: 9px; padding: 15px 20px;
+  background: var(--panel); border-bottom: 1px solid var(--panel-edge);
+}
+.surf-title, .dv-title {
+  margin-left: 12px; font-family: var(--mono); font-size: 14px; letter-spacing: 0.1em; color: var(--muted);
+}
+.surf-body, .dv-body { padding: 30px 40px; }
+/* the scene content that lives INSIDE the persistent surf-window */
+.device-content {
+  position: absolute; left: 388px; right: 388px; top: 312px; bottom: 200px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+  gap: 6px; text-align: left;
+}
+.dv-kicker {
+  font-family: var(--mono); font-size: 16px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 18px;
+}
+.dv-line { font-family: var(--mono); font-size: 30px; line-height: 1.7; color: var(--text); }
+.dv-line.dv-cmd { display: flex; align-items: baseline; }
+.dv-prompt { color: var(--accent); font-weight: 700; margin-right: 16px; }
+.dv-mark { color: var(--cmt); margin-right: 14px; }        /* success tick — comment green */
+.dv-line.dv-out { color: var(--muted); padding-left: 38px; font-size: 27px; }
+
+/* ---- card_handoff — a config.toml file-card that flies INTO the terminal ---- */
+.card-handoff { display: flex; flex-direction: column; gap: 28px; }
+.ch-stage { width: 1360px; }
+.ch-card {
+  width: 440px; background: var(--editor); color: var(--text);
+  border: 1px solid var(--panel-edge); border-radius: 10px; padding: 22px 24px; text-align: left;
+}
+.ch-card-title {
+  font-family: var(--mono); font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fn);
+}
+.ch-card-rule { height: 1px; width: 54px; background: var(--panel-edge); margin: 12px 0 14px; }
+.ch-card-body { font-family: var(--mono); font-size: 22px; line-height: 1.45; color: var(--str); }
+/* card mounted in the device: anchored at frame-left, then it flies in (JS owns the flight) */
+.ch-into-device .ch-card { position: absolute; left: -40px; top: 30px; width: 440px; z-index: 4; }
+.ch-into-device .ch-runline { color: var(--muted); }
+.ch-runline { font-family: var(--mono); font-size: 25px; color: var(--muted); }
+.ch-spinner { color: var(--accent); }
+/* non-surface fallback: a side card hands off to a run panel */
+.ch-panel {
+  flex: 1; background: var(--editor); border: 1px solid var(--panel-edge);
+  border-radius: 12px; overflow: hidden; text-align: left;
+}
+.ch-panel-head {
+  display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+  background: var(--panel); border-bottom: 1px solid var(--panel-edge);
+}
+.ch-panel-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.ch-panel-title { font-family: var(--mono); font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.ch-panel-body { padding: 24px 28px; display: flex; flex-direction: column; gap: 14px; }
+.ch-result { font-family: var(--mono); font-size: 24px; color: var(--text); }
+.ch-result-mark { color: var(--cmt); }
+
+/* ---- panel_takeover — a full-frame IDE list of what fights you ---- */
+.panel-takeover { width: 1180px; text-align: left; }
+.panel-head {
+  display: flex; align-items: baseline; gap: 22px;
+  border-bottom: 1px solid var(--panel-edge); padding-bottom: 16px; margin-bottom: 28px;
+}
+.takeover-title { font-family: var(--mono); font-size: 20px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
+.panel-count, .panel-unit, .panel-foot {
+  font-family: var(--mono); font-size: 15px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+}
+.takeover-item { display: flex; align-items: center; gap: 22px; margin: 22px 0; font-family: var(--mono); font-size: 34px; font-weight: 600; color: var(--text); }
+.takeover-tick { width: 6px; height: 38px; border-radius: 2px; background: var(--accent); }
+.takeover-index {
+  width: 52px; height: 52px; flex: 0 0 52px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--panel-edge); border-radius: 10px; font-family: var(--mono); font-size: 22px; color: var(--accent);
+}
+.takeover-item .icon-coin { width: 60px; height: 60px; flex: 0 0 60px; }
+.takeover-copy { display: flex; flex-direction: column; }
+.takeover-sub { font-family: var(--mono); font-size: 19px; color: var(--muted); font-weight: 400; margin-top: 3px; }
+
+/* ---- type_slam — mono headline, one keyword lit in accent ---- */
+.type-slam { max-width: 1400px; display: flex; flex-direction: column; gap: 22px; }
+.slam-line { font-family: var(--mono); font-weight: 800; font-size: 92px; line-height: 1.04; letter-spacing: -0.02em; color: var(--text); }
+.slam-key { color: var(--accent); }
+
+/* ---- lower_third — a compact IDE panel that annotates the screen ---- */
+.lower-third {
+  display: flex; align-items: center; gap: 20px;
+  background: var(--panel); border: 1px solid var(--panel-edge); border-left: 3px solid var(--accent);
+  border-radius: 10px; padding: 22px 30px;
+}
+.lt-bar { display: none; }
+.lt-icon { display: flex; align-items: center; }
+.lt-body { display: flex; flex-direction: column; }
+.lt-label { font-family: var(--mono); font-size: 15px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+.lt-text { font-family: var(--mono); font-size: 32px; font-weight: 700; color: var(--text); margin-top: 5px; }
+
+/* ---- kinetic title (cover / hook) ---- */
+.kinetic-title { max-width: 1150px; display: flex; flex-direction: column; gap: 22px; }
+.kt-line { font-family: var(--mono); font-weight: 800; font-size: 84px; line-height: 1.06; letter-spacing: -0.015em; color: var(--text); }
+.kt-line .w { display: inline-block; }
+.kt-line .w.alt { color: var(--accent); }
+
+/* ---- stat / big number (mono numerals, tabular) ---- */
+.stat-callout, .big-number { display: flex; flex-direction: column; gap: 16px; }
+.stat-num, .bn-num { font-family: var(--mono); font-weight: 800; letter-spacing: -0.03em; color: var(--accent); font-variant-numeric: tabular-nums; }
+.stat-num { font-size: 190px; line-height: 0.92; }
+.bn-num { font-size: 280px; line-height: 0.9; }
+.stat-delta { display: inline-block; margin-left: 22px; padding: 8px 16px; vertical-align: middle; border: 1px solid var(--accent); border-radius: 8px; font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--accent); }
+.stat-label, .bn-label { font-family: var(--mono); font-size: 32px; color: var(--text); letter-spacing: 0.02em; }
+.stat-context { font-family: var(--mono); font-size: 21px; color: var(--muted); }
+
+/* ---- terminal (legacy standalone kind, same window language) ---- */
+.terminal { width: 1180px; background: var(--editor); border: 1px solid var(--panel-edge); border-radius: 12px; overflow: hidden; text-align: left; }
+.term-titlebar { display: flex; align-items: center; gap: 9px; padding: 15px 20px; background: var(--panel); border-bottom: 1px solid var(--panel-edge); }
+.term-title { margin-left: 12px; font-family: var(--mono); font-size: 14px; letter-spacing: 0.1em; color: var(--muted); }
+.term-body { padding: 28px 36px; font-family: var(--mono); font-size: 27px; line-height: 1.75; }
+.term-prompt { color: var(--accent); font-weight: 700; margin-right: 16px; }
+.term-cmd { color: var(--text); }
+.term-out { color: var(--muted); padding-left: 34px; }
+
+/* ---- quote card ---- */
+.quote-card { max-width: 1150px; text-align: left; }
+.quote-mark { font-family: var(--mono); font-size: 120px; line-height: 0.6; color: var(--accent); }
+.quote-text { font-family: var(--mono); font-size: 52px; font-weight: 700; line-height: 1.24; color: var(--text); letter-spacing: -0.01em; }
+.quote-attr { display: flex; align-items: center; gap: 16px; margin-top: 30px; font-family: var(--mono); font-size: 20px; color: var(--muted); }
+.quote-avatar { width: 52px; height: 52px; border-radius: 12px; background: var(--panel); border: 1px solid var(--panel-edge); display: inline-flex; align-items: center; justify-content: center; color: var(--accent); font-weight: 700; }
+.quote-rule { flex: 0 0 90px; height: 1px; background: var(--panel-edge); }
+
+/* ---- cursor-press CTA (cursor tip lands ON the pill — JS owns its position) ---- */
+.cursor-press { display: flex; flex-direction: column; gap: 32px; align-items: flex-start; }
+.cp-lead { font-family: var(--mono); font-weight: 800; font-size: 84px; line-height: 1.04; letter-spacing: -0.02em; color: var(--text); }
+.cp-pill { background: var(--accent); color: #06202e; font-family: var(--mono); font-weight: 800; font-size: 36px; letter-spacing: 0.01em; padding: 22px 56px; border-radius: 10px; }
+.cp-url { font-family: var(--mono); font-size: 23px; letter-spacing: 0.08em; color: var(--muted); }
+.cp-cursor { color: var(--text); }
+
+/* ---- overlay mode: compact IDE plates in the safe zone (true alpha, same choreography) ---- */
+.mode-overlay .scene-inner {
+  box-sizing: border-box; background: rgba(30, 30, 30, 0.94);
+  border: 1px solid var(--panel-edge); border-radius: 10px; padding: 50px 30px 26px;
+}
+.mode-overlay .scene-inner::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 38px;
+  border-bottom: 1px solid var(--panel-edge);
+  background:
+    radial-gradient(circle at 22px 19px, #ff5f56 5px, transparent 6px),
+    radial-gradient(circle at 42px 19px, #ffbd2e 5px, transparent 6px),
+    radial-gradient(circle at 62px 19px, #27c93f 5px, transparent 6px);
+}
+/* archetypes that carry their own window/card don't get the generic plate */
+.mode-overlay .scene-inner.device-showcase,
+.mode-overlay .scene-inner.lower-third {
+  background: none; border: none; padding: 0;
+}
+.mode-overlay .scene-inner.device-showcase::before,
+.mode-overlay .scene-inner.lower-third::before { display: none; }
+.mode-overlay .scene-inner.device-content { position: static; left: auto; right: auto; top: auto; bottom: auto; }
+.mode-overlay .dv-window { width: auto; min-height: 0; max-width: 560px; }
+.mode-overlay .dv-body { padding: 22px 26px; }
+.mode-overlay .dv-kicker { font-size: 14px; margin-bottom: 12px; }
+.mode-overlay .dv-line { font-size: 20px; }
+.mode-overlay .dv-line.dv-out { font-size: 18px; }
+.mode-overlay .slam-line { font-size: 48px; }
+.mode-overlay .kt-line { font-size: 44px; }
+.mode-overlay .lt-text { font-size: 28px; }
+.mode-overlay .stat-num { font-size: 108px; }
+.mode-overlay .bn-num { font-size: 120px; }
+.mode-overlay .stat-label, .mode-overlay .bn-label { font-size: 24px; }
+.mode-overlay .takeover-item { font-size: 28px; margin: 16px 0; }
+.mode-overlay .takeover-title { font-size: 17px; }
+.mode-overlay .ch-stage { width: auto; flex-direction: column; }
+.mode-overlay .ch-card { width: auto; max-width: 520px; }
+.mode-overlay .term-body { font-size: 22px; padding: 20px 24px; }
+.mode-overlay .terminal { width: auto; max-width: 560px; }
+.mode-overlay .quote-text { font-size: 32px; }
+.mode-overlay .cp-lead { font-size: 46px; }
+.mode-overlay .cp-pill { font-size: 26px; padding: 16px 40px; }
+.mode-overlay .scene-mascot { width: 96px; right: -18px; bottom: -18px; }
