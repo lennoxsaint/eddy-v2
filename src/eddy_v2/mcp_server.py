@@ -11,6 +11,7 @@ from .doctor import doctor_payload
 from .pipeline import edit_folder
 from .quality_review import apply_quality_review
 from .receipts import Receipts
+from .run_summary import build_run_output_payload
 
 TOOLS = [
     {
@@ -167,7 +168,7 @@ def _edit_payload(args: dict[str, Any]) -> dict[str, Any]:
         target_duration_s=args.get("target_duration"),
         host_intent_payload=_host_intent_payload(args),
     )
-    return {"run_dir": str(result.run_dir), "status": result.status, "blockers": result.blockers}
+    return build_run_output_payload(result.run_dir, status=result.status, blockers=result.blockers)
 
 
 def _bakeoff_payload(args: dict[str, Any]) -> dict[str, Any]:
@@ -185,13 +186,12 @@ def _bakeoff_payload(args: dict[str, Any]) -> dict[str, Any]:
         receipts=Receipts(result.run_dir / "receipts.jsonl"),
     )
     return {
-        "run_dir": str(result.run_dir),
+        **build_run_output_payload(result.run_dir, status=result.status, blockers=result.blockers),
         "bakeoff": str(result.run_dir / "bakeoff.md"),
         "bakeoff_json": str(result.run_dir / "bakeoff.json"),
-        "status": result.status,
-        "blockers": result.blockers,
         "current_output_proof": report["current_output_proof"],
         "winner": report["winner"],
+        "remaining_blockers": report["completion_audit"]["remaining_blockers"],
     }
 
 

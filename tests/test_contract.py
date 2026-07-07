@@ -990,6 +990,24 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
 
     assert started["status"] == "blocked"
     assert "cloud_audio_credentials_missing_or_failed" in started["blockers"]
+    assert started["receipts"]["exists"] is True
+    assert started["receipts"]["row_count"] > 0
+    assert Path(started["scorecard"]).exists()
+    assert Path(started["scorecard_md"]).exists()
+    assert Path(started["long_video"]).exists()
+    assert started["shorts_count"] >= 0
+    assert started["proof_statuses"]["shorts_proof"] == "shortfall"
+    assert Path(started["review_page"]).exists()
+    assert started["proof_statuses"]["hero_run_proof"] == "pass"
+    assert started["proof_statuses"]["cloud_cost_proof"] == "blocked"
+    assert started["proof_statuses"]["final_publishability"] == "blocked"
+    assert started["review_command"].startswith("eddy review ")
+    assert started["audio_retry_command"].startswith("eddy audio-proof ")
+    assert {action["action"] for action in started["next_actions"]} >= {
+        "configure_one_audio_provider",
+        "prove_descript_studio_sound_parity",
+        "record_lennox_quality_review",
+    }
     assert doctor["ok"] is True
     assert doctor["missing_required_runtime_tools"] == []
     assert "code-cinema" in doctor["identities"]
@@ -1101,6 +1119,11 @@ def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, mo
 
     assert result["status"] == "blocked"
     assert "cloud_audio_credentials_missing_or_failed" in result["blockers"]
+    assert Path(result["scorecard"]).exists()
+    assert result["proof_statuses"]["hero_run_proof"] == "pass"
+    assert result["proof_statuses"]["final_publishability"] == "blocked"
+    assert result["review_page"]
+    assert result["remaining_blockers"] == result["blockers"]
     assert result["current_output_proof"]["status"] == "missing"
     assert result["winner"] == "undecided_pending_lennox_8_of_10_review"
     assert Path(result["bakeoff_json"]).exists()

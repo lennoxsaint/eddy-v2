@@ -12,6 +12,7 @@ from .doctor import doctor_payload
 from .pipeline import edit_folder
 from .quality_review import apply_quality_review
 from .receipts import Receipts
+from .run_summary import build_run_output_payload
 
 
 def load_intent_payload(path: str | None) -> dict[str, Any] | None:
@@ -37,7 +38,7 @@ def edit(args: argparse.Namespace) -> int:
         target_duration_s=args.target_duration,
         host_intent_payload=load_intent_payload(args.intent),
     )
-    print(json.dumps({"run_dir": str(result.run_dir), "status": result.status, "blockers": result.blockers}, indent=2))
+    print(json.dumps(build_run_output_payload(result.run_dir, status=result.status, blockers=result.blockers), indent=2))
     return 0 if result.status == "complete" else 2
 
 
@@ -86,12 +87,12 @@ def bakeoff(args: argparse.Namespace) -> int:
     print(
         json.dumps(
             {
-                "run_dir": str(result.run_dir),
+                **build_run_output_payload(result.run_dir, status=result.status, blockers=result.blockers),
                 "bakeoff": str(result.run_dir / "bakeoff.md"),
                 "bakeoff_json": str(result.run_dir / "bakeoff.json"),
-                "status": result.status,
                 "current_output_proof": report["current_output_proof"],
                 "winner": report["winner"],
+                "remaining_blockers": report["completion_audit"]["remaining_blockers"],
             },
             indent=2,
         )
