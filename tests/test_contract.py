@@ -463,19 +463,29 @@ def test_transcript_sidecar_drives_semantic_chapters_and_short_starts(tmp_path: 
     launch_kit = json.loads((result.run_dir / "final" / "launch-kit" / "launch-kit.json").read_text(encoding="utf-8"))
     transcript_cues = json.loads((result.run_dir / "transcript-cues.json").read_text(encoding="utf-8"))
     provenance = json.loads((result.run_dir / "final" / "caption-provenance.json").read_text(encoding="utf-8"))
+    captions = json.loads((result.run_dir / "final" / "captions.json").read_text(encoding="utf-8"))
+    srt = (result.run_dir / "final" / "subtitles.srt").read_text(encoding="utf-8")
 
     assert result.status == "blocked"
     assert transcript_cues["source"].endswith("transcript.vtt")
     assert plan["transcript_cue_count"] == 3
+    assert captions["cues"][0]["kind"] == "transcript"
+    assert captions["visual_callouts"][0]["kind"] == "hook"
+    assert "First semantic hook explains why proof gated" in srt
+    assert "editing matters" in srt
+    assert provenance["status"] == "pass"
+    assert provenance["sidecar_source"] == "transcript"
     assert provenance["transcript_available"] is True
     assert provenance["transcript_cue_count"] == 3
-    assert provenance["speech_accurate_subtitles"] is False
+    assert provenance["speech_accurate_subtitles"] is True
+    assert provenance["warning"] is None
     assert [chapter["source"] for chapter in launch_kit["chapters"]] == ["transcript"]
     assert launch_kit["chapters"][0]["title"].startswith("First semantic hook")
     assert plan["short_starts_s"] == [0.0, 17.0, 34.0]
     assert len(list((result.run_dir / "final" / "shorts").glob("short-*.mp4"))) == 3
     assert any(row["event"] == "transcript" and row["status"] == "pass" and row["cue_count"] == 3 for row in rows)
     assert any(row["event"] == "semantic_plan" and row["status"] == "pass" and row["chapter_count"] == 1 for row in rows)
+    assert any(row["event"] == "caption_plan" and row["sidecar_source"] == "transcript" and row["speech_accurate_subtitles"] is True for row in rows)
     assert any(row["event"] == "cut_plan" and row["short_start_source"] == "transcript" for row in rows)
 
 

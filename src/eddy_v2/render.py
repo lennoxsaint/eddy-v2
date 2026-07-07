@@ -207,6 +207,8 @@ def render_long(
         target,
         receipts,
         transcript_cue_count=plan.transcript_cue_count if plan else 0,
+        transcript_cues_path=run_dir / "transcript-cues.json",
+        source_segments=[segment.as_dict() for segment in plan.source_segments()] if plan else None,
     )
     long_caption_filters = cue_drawtext_filters(
         run_dir,
