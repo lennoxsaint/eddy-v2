@@ -12,7 +12,7 @@ from eddy_v2.bakeoff import build_bakeoff_report
 from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json
 from eddy_v2.identities import SLUGS, list_identities, load_identity
-from eddy_v2.mcp_server import TOOLS
+from eddy_v2.mcp_server import TOOLS, handle
 from eddy_v2.models import EditIntent
 from eddy_v2.motion import create_motion_project, run_hyperframes
 from eddy_v2.plan import EditPlan, Segment, create_edit_plan, select_semantic_short_starts, select_short_starts
@@ -541,9 +541,78 @@ def test_openrouter_critic_can_repair_invalid_editor_intent(tmp_path: Path, monk
 
 def test_mcp_schemas_match_cli_surface():
     names = {tool["name"] for tool in TOOLS}
-    assert names == {"eddy_v2_edit_start", "eddy_v2_artifacts"}
+    assert names == {
+        "eddy_v2_doctor",
+        "eddy_v2_edit_start",
+        "eddy_v2_status",
+        "eddy_v2_artifacts",
+        "eddy_v2_scorecard",
+        "eddy_v2_bakeoff",
+    }
     for tool in TOOLS:
         assert tool["inputSchema"]["type"] == "object"
+    required = {tool["name"]: tool["inputSchema"]["required"] for tool in TOOLS}
+    assert required["eddy_v2_doctor"] == []
+    assert required["eddy_v2_edit_start"] == ["folder"]
+    assert required["eddy_v2_status"] == ["run_dir"]
+    assert required["eddy_v2_artifacts"] == ["run_dir"]
+    assert required["eddy_v2_scorecard"] == ["run_dir"]
+    assert required["eddy_v2_bakeoff"] == ["folder"]
+
+
+def mcp_json(result: dict) -> dict:
+    return json.loads(result["content"][0]["text"])
+
+
+def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    started = mcp_json(
+        handle(
+            "tools/call",
+            {
+                "name": "eddy_v2_edit_start",
+                "arguments": {"folder": str(folder), "local_only": True, "target_duration": 2},
+            },
+        )
+    )
+    run_dir = Path(started["run_dir"])
+
+    doctor = mcp_json(handle("tools/call", {"name": "eddy_v2_doctor", "arguments": {}}))
+    status = mcp_json(handle("tools/call", {"name": "eddy_v2_status", "arguments": {"run_dir": str(run_dir)}}))
+    artifacts = mcp_json(handle("tools/call", {"name": "eddy_v2_artifacts", "arguments": {"run_dir": str(run_dir)}}))
+    scorecard = handle("tools/call", {"name": "eddy_v2_scorecard", "arguments": {"run_dir": str(run_dir)}})["content"][0]["text"]
+
+    assert started["status"] == "complete"
+    assert started["blockers"] == []
+    assert "code-cinema" in doctor["identities"]
+    assert status["status"] == "complete"
+    assert "final/video.mp4" in artifacts["files"]
+    assert "scorecard.json" in artifacts["files"]
+    assert "# Eddy V2 Scorecard" in scorecard
+
+
+def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setattr(bakeoff_module, "CURRENT_EDDY_RUNS", tmp_path / "empty-current-runs")
+
+    result = mcp_json(
+        handle(
+            "tools/call",
+            {
+                "name": "eddy_v2_bakeoff",
+                "arguments": {"folder": str(folder), "local_only": True, "target_duration": 2},
+            },
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["blockers"] == []
+    assert result["current_output_proof"]["status"] == "missing"
+    assert result["winner"] == "undecided_pending_lennox_8_of_10_review"
+    assert Path(result["bakeoff_json"]).exists()
+    assert Path(result["bakeoff"]).exists()
 
 
 def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
