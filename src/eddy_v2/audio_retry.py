@@ -153,7 +153,7 @@ def retry_audio_proof(run_dir: Path, *, local_only: bool = False, cloud_budget_u
     _refresh_json_audio(run_dir / "final" / "review" / "review-packet.json", audio_proof_path, proof, cost_summary)
     _rewrite_line(run_dir / "scorecard.md", "- cost:", f"- cost: ${cost_summary['spent_usd']:.4f} / ${cost_summary['cap_usd']:.2f}")
     _rewrite_line(run_dir / "scorecard.md", "- audio_quality:", f"- audio_quality: {proof.get('quality_status', 'missing')}")
-    _rewrite_line(run_dir / "final" / "review" / "review-packet.md", "- audio_quality:", f"- audio_quality: {proof.get('quality_status', 'missing')}")
+    _rewrite_line(run_dir / "final" / "review" / "README.md", "- audio_quality:", f"- audio_quality: {proof.get('quality_status', 'missing')}")
 
     status = "pass" if proof.get("strong_studio_sound") is True else "blocked"
     result = {

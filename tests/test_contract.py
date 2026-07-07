@@ -864,6 +864,7 @@ def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_pat
     assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
     assert launch_kit["audio_proof"]["quality_status"] == "strong_studio_sound"
     assert packet["audio_proof"]["quality_status"] == "strong_studio_sound"
+    assert "- audio_quality: strong_studio_sound" in (result.run_dir / "final" / "review" / "README.md").read_text(encoding="utf-8")
 
 
 def test_audio_proof_retry_local_only_refuses_cloud_without_fake_upload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
