@@ -13,6 +13,9 @@ from .quality_review import apply_quality_review
 from .receipts import Receipts
 from .run_summary import build_run_output_payload
 
+PROTOCOL_VERSION = "2025-06-18"
+SERVER_INFO = {"name": "eddy-v2", "version": "0.1.0"}
+
 TOOLS = [
     {
         "name": "eddy_v2_doctor",
@@ -217,7 +220,23 @@ def _audio_proof_payload(args: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
+def _initialize_payload(params: dict[str, Any]) -> dict[str, Any]:
+    requested_version = params.get("protocolVersion")
+    protocol_version = str(requested_version) if requested_version else PROTOCOL_VERSION
+    return {
+        "protocolVersion": protocol_version,
+        "capabilities": {"tools": {}},
+        "serverInfo": SERVER_INFO,
+    }
+
+
+def handle(method: str, params: dict[str, Any]) -> dict[str, Any] | None:
+    if method == "initialize":
+        return _initialize_payload(params)
+    if method == "notifications/initialized":
+        return None
+    if method == "ping":
+        return {}
     if method == "tools/list":
         return {"tools": TOOLS}
     if method == "tools/call":
@@ -245,11 +264,16 @@ def handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
 def main() -> int:
     for line in sys.stdin:
         request = json.loads(line)
+        request_id = request.get("id")
         try:
             result = handle(request.get("method", ""), request.get("params") or {})
-            response = {"jsonrpc": "2.0", "id": request.get("id"), "result": result}
+            if request_id is None:
+                continue
+            response = {"jsonrpc": "2.0", "id": request_id, "result": result or {}}
         except Exception as exc:
-            response = {"jsonrpc": "2.0", "id": request.get("id"), "error": {"code": -32000, "message": str(exc)}}
+            if request_id is None:
+                continue
+            response = {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32000, "message": str(exc)}}
         print(json.dumps(response), flush=True)
     return 0
 

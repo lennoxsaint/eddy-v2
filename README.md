@@ -56,6 +56,17 @@ Read commands accept `--json` for explicit machine-readable output; `eddy scorec
 
 Run `python scripts/contract_audit.py` before public handoff. It checks the repo-scope contract: MIT license, no runtime dependencies, permissive build/dev dependencies, required CLI and MCP surfaces, the Node/HyperFrames renderer boundary, the six frozen identities, required docs/ADRs/skill files, and absence of social/video publishing integrations.
 
+## MCP
+
+Install the package and point your MCP client at `mcp/eddy-v2.config.json`, or run the server directly:
+
+```bash
+eddy-v2-mcp
+```
+
+The server supports `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`.
+It exposes the same editing, bakeoff, status, scorecard, review, and audio-proof surfaces as the CLI.
+
 ## Model Autonomy
 
 When `OPENROUTER_API_KEY` is configured, Eddy runs a bounded editor+critic loop before rendering: the editor proposes `intent.json`, the critic approves or returns a repair object, and the final intent is clamped back to frozen identities and source duration. The loop is fully receipted and cost-capped. Eddy does not run a model council on every edit; escalation belongs in the bakeoff workflow after repeated failures.

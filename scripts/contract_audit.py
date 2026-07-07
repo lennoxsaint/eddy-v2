@@ -118,6 +118,27 @@ def _mcp_tools() -> set[str]:
     return {str(tool["name"]) for tool in mcp.TOOLS}
 
 
+def _mcp_initialize_ok() -> bool:
+    sys.path.insert(0, str(SRC))
+    mcp = importlib.import_module("eddy_v2.mcp_server")
+    payload = mcp.handle(
+        "initialize",
+        {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "contract-audit", "version": "0"},
+        },
+    )
+    if not isinstance(payload, dict):
+        return False
+    return (
+        payload.get("protocolVersion") == "2025-06-18"
+        and payload.get("serverInfo") == {"name": "eddy-v2", "version": "0.1.0"}
+        and isinstance(payload.get("capabilities"), dict)
+        and isinstance(payload.get("capabilities", {}).get("tools"), dict)
+    )
+
+
 def _identity_slugs() -> set[str]:
     sys.path.insert(0, str(SRC))
     identities = importlib.import_module("eddy_v2.identities")
@@ -164,6 +185,7 @@ def main() -> int:
         "permissive_build_and_dev_dependencies": build_deps <= PERMISSIVE_BUILD_DEPS and dev_deps <= PERMISSIVE_DEV_DEPS,
         "required_cli_surface": REQUIRED_CLI <= subcommands,
         "required_mcp_surface": REQUIRED_MCP <= mcp_tools,
+        "mcp_initialize_lifecycle": _mcp_initialize_ok(),
         "frozen_identity_pack": identity_slugs == REQUIRED_IDENTITIES,
         "required_docs_present": all(path.exists() for path in REQUIRED_DOCS),
         "node_hyperframes_renderer_boundary": (ROOT / "renderer" / "hyperframes-runner.mjs").exists()

@@ -15,7 +15,7 @@ from eddy_v2.commands import ffprobe_json
 from eddy_v2.cloud_quality import cloud_audio_profile, cloud_model_profile
 from eddy_v2.doctor import doctor_payload
 from eddy_v2.identities import SLUGS, list_identities, load_identity
-from eddy_v2.mcp_server import TOOLS, handle
+from eddy_v2.mcp_server import SERVER_INFO, TOOLS, handle
 from eddy_v2.models import EditIntent, create_intent
 from eddy_v2.motion import create_motion_project, run_hyperframes
 from eddy_v2.plan import EditPlan, Segment, create_edit_plan, select_semantic_short_starts, select_short_starts
@@ -948,6 +948,52 @@ def test_mcp_schemas_match_cli_surface():
     assert required["eddy_v2_bakeoff"] == ["folder"]
     assert required["eddy_v2_review"] == ["run_dir", "long_edit", "motion", "audio", "shorts"]
     assert required["eddy_v2_audio_proof"] == ["run_dir"]
+
+
+def test_mcp_initialize_and_stdio_smoke():
+    initialized = handle(
+        "initialize",
+        {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "pytest", "version": "0"},
+        },
+    )
+    listed = handle("tools/list", {})
+
+    assert initialized is not None
+    assert initialized["protocolVersion"] == "2025-06-18"
+    assert initialized["capabilities"] == {"tools": {}}
+    assert initialized["serverInfo"] == SERVER_INFO
+    assert handle("notifications/initialized", {}) is None
+    assert handle("ping", {}) == {}
+    assert listed is not None
+    assert {tool["name"] for tool in listed["tools"]} == {tool["name"] for tool in TOOLS}
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "subprocess-test", "version": "0"},
+        },
+    }
+    proc = subprocess.run(
+        [sys.executable, "-m", "eddy_v2.mcp_server"],
+        input=json.dumps(request) + "\n",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+    )
+    response = json.loads(proc.stdout)
+
+    assert proc.returncode == 0, proc.stderr
+    assert response["jsonrpc"] == "2.0"
+    assert response["id"] == 1
+    assert response["result"]["serverInfo"] == SERVER_INFO
 
 
 def mcp_json(result: dict) -> dict:
