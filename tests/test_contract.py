@@ -11,7 +11,7 @@ import eddy_v2.bakeoff as bakeoff_module
 from eddy_v2.audio_retry import retry_audio_proof
 from eddy_v2.bakeoff import build_bakeoff_report
 from eddy_v2.cost import CostTracker
-from eddy_v2.commands import ffprobe_json
+from eddy_v2.commands import ffprobe_json, run_command
 from eddy_v2.cloud_quality import cloud_audio_profile, cloud_model_profile
 from eddy_v2.cli import build_parser
 from eddy_v2.doctor import doctor_payload, onepassword_cli_status
@@ -246,6 +246,26 @@ def test_receipts_cover_core_events(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert any(row["event"] == "transcript" and row["status"] == "missing" and row["code"] == "transcript_source_missing" for row in rows)
     assert any(row["event"] == "semantic_plan" and row["status"] == "fallback" for row in rows)
     assert launch_kit["chapters"][0]["source"] == "fallback"
+
+
+def test_command_receipts_tolerate_broken_utf8_tail(tmp_path: Path):
+    receipts = Receipts(tmp_path / "receipts.jsonl")
+    proc = run_command(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.stdout.buffer.write(b'good\\xe2'); sys.stderr.buffer.write(b'warn\\xe2')",
+        ],
+        receipts,
+        event="broken_utf8",
+    )
+    finish = receipts.read_all()[-1]
+
+    assert proc.returncode == 0
+    assert "good" in finish["stdout_tail"]
+    assert "warn" in finish["stderr_tail"]
+    assert "\ufffd" in finish["stdout_tail"]
+    assert "\ufffd" in finish["stderr_tail"]
 
 
 def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
