@@ -65,7 +65,7 @@ def render_long(
     start = plan.long_segment.start_s if plan else 0.0
     target = max(1.0, min(plan.long_segment.duration_s if plan else intent.target_duration_s, source_duration - start))
     audio = polish_audio(sources, run_dir, receipts, policy, cost, start_s=start, duration_s=target)
-    motion_project = create_motion_project(run_dir, intent.identity, intent.hook, portrait=False, duration_s=target, receipts=receipts)
+    motion_project = create_motion_project(run_dir, intent.identity, intent.hook, portrait=False, duration_s=target, plan=plan, receipts=receipts)
     motion_output = run_hyperframes(motion_project, receipts)
     validate_motion_artifact(motion_project, motion_output, receipts, portrait=False)
 

@@ -15,7 +15,7 @@ from eddy_v2.identities import SLUGS, list_identities, load_identity
 from eddy_v2.mcp_server import TOOLS
 from eddy_v2.models import EditIntent
 from eddy_v2.motion import create_motion_project, run_hyperframes
-from eddy_v2.plan import create_edit_plan, select_semantic_short_starts, select_short_starts
+from eddy_v2.plan import EditPlan, Segment, create_edit_plan, select_semantic_short_starts, select_short_starts
 from eddy_v2.pipeline import edit_folder
 from eddy_v2.policy import CLOUD_SURFACES, RunPolicy
 from eddy_v2.qa import validate_motion_artifact, validate_short_video
@@ -247,12 +247,45 @@ def test_motion_project_has_dense_plan_and_visual_qa(tmp_path: Path, monkeypatch
     assert plan["dense_first_60_s"] == 60
     assert plan["scene_count"] == 3
     assert plan["transition_count"] == 2
+    assert plan["sparse_overlay_count"] == 0
     assert plan["composite_mode"] == "screen_blend"
     assert html.count('class="scene"') == 3
     assert "window.__timelines[\"eddy-v2\"]" in html
     assert visual["unique_frame_hashes"] >= 2
     assert any(row["event"] == "motion_plan" and row["status"] == "pass" for row in rows)
     assert any(row["event"] == "gate" and row["name"] == "motion_visual_qa" and row["status"] == "pass" for row in rows)
+
+
+def test_motion_project_adds_sparse_content_overlays_after_first_60(tmp_path: Path):
+    receipts = Receipts(tmp_path / "receipts.jsonl")
+    edit_plan = EditPlan(
+        source_duration_s=140,
+        long_segment=Segment(start_s=0, duration_s=96, reason="test_segment"),
+        short_starts_s=[],
+        non_silent_intervals=[(66, 72), (88, 94)],
+        transcript_cue_count=2,
+        semantic_chapters=[{"time": "01:08", "title": "Second section shows real context", "source": "transcript"}],
+    )
+    project = create_motion_project(
+        tmp_path / "run",
+        "code-cinema",
+        "Proof-gated video needs motion receipts",
+        duration_s=96,
+        plan=edit_plan,
+        receipts=receipts,
+    )
+    motion_plan = json.loads((project / "motion-plan.json").read_text(encoding="utf-8"))
+    html = (project / "index.html").read_text(encoding="utf-8")
+    rows = receipts.read_all()
+
+    assert motion_plan["dense_first_60_s"] == 60
+    assert motion_plan["sparse_overlay_count"] >= 1
+    assert motion_plan["sparse_overlays"][0]["start_s"] >= 60
+    assert motion_plan["sparse_overlays"][0]["source"] == "transcript"
+    assert "DENSE = Math.min(60, D)" in html
+    assert 'class="beat-card"' in html
+    assert "Second section shows real context" in html
+    assert any(row["event"] == "motion_content_beats" and row["beat_count"] >= 1 for row in rows)
 
 
 def test_timed_caption_artifacts_are_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

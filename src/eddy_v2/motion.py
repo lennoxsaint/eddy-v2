@@ -8,7 +8,10 @@ from pathlib import Path
 
 from .commands import run_command
 from .identities import load_identity
+from .plan import EditPlan
 from .receipts import Receipts
+
+MotionBeat = dict[str, float | str]
 
 
 def _copy_identity_assets(identity_root: Path, project: Path) -> None:
@@ -42,6 +45,99 @@ def _motion_scenes(duration_s: float, *, portrait: bool) -> list[dict[str, float
     ]
 
 
+def _chapter_seconds(value: object) -> float | None:
+    if not isinstance(value, str):
+        return None
+    parts = value.strip().split(":")
+    try:
+        if len(parts) == 2:
+            return (int(parts[0]) * 60) + int(parts[1])
+        if len(parts) == 3:
+            return (int(parts[0]) * 3600) + (int(parts[1]) * 60) + int(parts[2])
+    except ValueError:
+        return None
+    return None
+
+
+def _short_text(value: object, fallback: str) -> str:
+    text = " ".join(str(value or fallback).split())
+    words = text.split()
+    if len(words) > 9:
+        text = " ".join(words[:9]).rstrip(".,:;") + "..."
+    return text[:96]
+
+
+def _append_beat(beats: list[MotionBeat], *, start_s: float, title: str, source: str) -> None:
+    if start_s < 60.0 or any(abs(start_s - float(existing["start_s"])) < 12.0 for existing in beats):
+        return
+    beats.append(
+        {
+            "id": f"beat-{len(beats) + 1}",
+            "start_s": round(start_s, 3),
+            "duration_s": 5.2,
+            "kicker": f"BEAT {len(beats) + 1:02d}",
+            "title": _short_text(title, "Proof beat"),
+            "source": source,
+        }
+    )
+
+
+def content_beats_from_plan(plan: EditPlan | None, duration_s: float, *, portrait: bool = False) -> list[MotionBeat]:
+    if portrait or not plan or duration_s <= 72.0:
+        return []
+    beats: list[MotionBeat] = []
+    segment_start = plan.long_segment.start_s
+    for chapter in plan.semantic_chapters or []:
+        chapter_s = _chapter_seconds(chapter.get("time"))
+        if chapter_s is None:
+            continue
+        relative = chapter_s - segment_start
+        if 60.0 <= relative <= duration_s - 6.0:
+            _append_beat(beats, start_s=relative, title=str(chapter.get("title") or "Transcript beat"), source="transcript")
+        if len(beats) == 4:
+            return beats
+    fallback_titles = ["Cut tightens here", "Screen proof", "Receipt check", "Launch beat"]
+    for interval_start, interval_end in plan.non_silent_intervals:
+        midpoint = (interval_start + interval_end) / 2
+        relative = midpoint - segment_start
+        if 60.0 <= relative <= duration_s - 6.0:
+            _append_beat(beats, start_s=relative, title=fallback_titles[len(beats) % len(fallback_titles)], source="audio_density")
+        if len(beats) == 4:
+            break
+    return beats
+
+
+def _beat_markup(beats: list[MotionBeat]) -> str:
+    return "\n".join(
+        f"""    <div id="{html.escape(str(beat["id"]))}" class="beat-card">
+      <div class="beat-kicker">{html.escape(str(beat["kicker"]))}</div>
+      <div class="beat-title">{html.escape(str(beat["title"]))}</div>
+      <div class="beat-meta">{html.escape(str(beat["source"]).replace("_", " "))}</div>
+      <div class="beat-rule"></div>
+    </div>"""
+        for beat in beats
+    )
+
+
+def _beat_script(beats: list[MotionBeat]) -> str:
+    lines: list[str] = []
+    for beat in beats:
+        beat_id = str(beat["id"])
+        start = float(beat["start_s"])
+        end = start + float(beat["duration_s"])
+        lines.extend(
+            [
+                f'    tl.set("#{beat_id}", {{ opacity: 1, y: 0 }}, {start:.3f});',
+                f'    tl.from("#{beat_id} .beat-kicker", {{ x: -24, opacity: 0, duration: 0.28, ease: "power4.out" }}, {start + 0.10:.3f});',
+                f'    tl.from("#{beat_id} .beat-title", {{ y: 34, opacity: 0, duration: 0.46, ease: "expo.out" }}, {start + 0.20:.3f});',
+                f'    tl.from("#{beat_id} .beat-meta", {{ x: 22, opacity: 0, duration: 0.32, ease: "back.out(1.1)" }}, {start + 0.42:.3f});',
+                f'    tl.from("#{beat_id} .beat-rule", {{ scaleX: 0, duration: 0.5, ease: "power3.out" }}, {start + 0.58:.3f});',
+                f'    tl.to("#{beat_id}", {{ opacity: 0, y: -18, duration: 0.28, ease: "power2.in" }}, {end:.3f});',
+            ]
+        )
+    return "\n".join(lines)
+
+
 def create_motion_project(
     run_dir: Path,
     identity_slug: str,
@@ -49,6 +145,7 @@ def create_motion_project(
     *,
     portrait: bool = False,
     duration_s: float = 60.0,
+    plan: EditPlan | None = None,
     receipts: Receipts | None = None,
 ) -> Path:
     identity = load_identity(identity_slug)
@@ -68,19 +165,26 @@ def create_motion_project(
     hook_a, hook_b, hook_c = (html.escape(part) for part in _split_hook(hook))
     duration = round(max(6.0 if portrait else 12.0, duration_s), 3)
     scenes = _motion_scenes(duration, portrait=portrait)
-    plan = {
+    beats = content_beats_from_plan(plan, duration, portrait=portrait)
+    motion_plan = {
         "identity": identity.slug,
         "surface": "shorts" if portrait else "long",
         "duration_s": duration,
         "dense_first_60_s": min(60.0, duration),
         "scene_count": len(scenes),
         "transition_count": len(scenes) - 1,
+        "sparse_overlay_count": len(beats),
         "composite_mode": "screen_blend",
         "scenes": scenes,
+        "sparse_overlays": beats,
     }
-    (project / "motion-plan.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
+    (project / "motion-plan.json").write_text(json.dumps(motion_plan, indent=2), encoding="utf-8")
     if receipts:
-        receipts.log("motion_plan", status="pass", project=str(project), **plan)
+        receipts.log("motion_plan", status="pass", project=str(project), **motion_plan)
+        if beats:
+            receipts.log("motion_content_beats", status="pass", project=str(project), beat_count=len(beats), beats=beats)
+    beat_markup = _beat_markup(beats)
+    beat_script = _beat_script(beats)
     (project / "DESIGN.md").write_text(
         f"# {identity.slug}\n\nFrozen Eddy V2 Identity Pack member. Compose from `frame.md`, `identity.css`, and `blocks.json`; do not restyle.\n",
         encoding="utf-8",
@@ -92,10 +196,10 @@ def create_motion_project(
   <meta charset="utf-8" />
   <style>
     {font_import}@import url("./identity.css");
-    body {{ margin: 0; background: transparent; font-family: var(--mono); }}
+    body {{ margin: 0; background: {"var(--ground, #07111f)" if portrait else "#000000"}; font-family: var(--mono); }}
     #stage {{
       width: {width}px; height: {height}px; position: relative; overflow: hidden;
-      color: var(--text, #ffffff); background: {"var(--ground, #07111f)" if portrait else "transparent"};
+      color: var(--text, #ffffff); background: {"var(--ground, #07111f)" if portrait else "#000000"};
       font-family: var(--mono);
     }}
     .grain {{
@@ -150,6 +254,7 @@ def create_motion_project(
     .line {{ display: flex; gap: 14px; align-items: baseline; }}
     .prompt {{ color: var(--accent, #ffffff); }}
     .muted {{ color: var(--muted, rgba(255,255,255,0.62)); }}
+    .terminal .muted {{ color: #d4d4d4; }}
     .receipt {{
       max-width: {680 if portrait else 560}px; background: var(--paper, #fdfaf1);
       color: var(--ink, #16140f); border: 0; font-family: var(--mono);
@@ -167,6 +272,31 @@ def create_motion_project(
       border: 1px solid color-mix(in srgb, var(--accent, #fff) 48%, transparent);
       border-radius: 50%; right: {60 if portrait else 150}px; bottom: {220 if portrait else 110}px;
       opacity: 0.32; z-index: 2;
+    }}
+    .beat-card {{
+      position: absolute; right: 104px; top: 172px; width: 540px; min-height: 220px;
+      padding: 28px 30px 26px; box-sizing: border-box; opacity: 0; z-index: 7;
+      background: color-mix(in srgb, var(--panel, #050e1c) 88%, transparent);
+      border: 1px solid var(--panel-edge, rgba(255,255,255,0.22));
+      border-top: 8px solid var(--accent, #ffffff);
+      box-shadow: 0 26px 80px rgba(0,0,0,0.28);
+    }}
+    .beat-kicker {{
+      color: var(--accent, #ffffff); font-family: var(--mono); letter-spacing: 0.18em;
+      font-size: 18px; font-weight: 900; margin-bottom: 18px;
+    }}
+    .beat-title {{
+      color: var(--text, #ffffff); font-family: var(--display, var(--mono));
+      font-size: 46px; line-height: 1.02; font-weight: 900; letter-spacing: 0; max-width: 480px;
+    }}
+    .beat-meta {{
+      color: var(--muted, rgba(255,255,255,0.68)); font-family: var(--mono);
+      font-size: 18px; font-weight: 800; margin-top: 18px; text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }}
+    .beat-rule {{
+      height: 4px; width: 58%; margin-top: 22px; background: var(--accent, #ffffff);
+      transform-origin: left center;
     }}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
@@ -205,13 +335,15 @@ def create_motion_project(
         </div>
       </div>
     </div>
+{beat_markup}
     <div id="wipe" class="wipe" data-layout-ignore></div>
   </div>
   <script>
     window.__timelines = window.__timelines || {{}};
     const D = {duration};
-    const t1 = Math.max(2.4, D * {0.32 if not portrait else 0.32});
-    const t2 = Math.max(t1 + 2.4, D * {0.66 if not portrait else 0.66});
+    const DENSE = Math.min(60, D);
+    const t1 = Math.max(2.4, DENSE * {0.32 if not portrait else 0.32});
+    const t2 = Math.max(t1 + 2.4, DENSE * {0.66 if not portrait else 0.66});
     const tl = gsap.timeline({{ paused: true }});
     tl.set("#scene-1", {{ opacity: 1 }}, 0);
     tl.from("#scene-1 .kicker", {{ y: 28, opacity: 0, duration: 0.44, ease: "power3.out" }}, 0.18);
@@ -235,6 +367,7 @@ def create_motion_project(
     tl.from("#scene-3 .kicker", {{ y: 32, opacity: 0, duration: 0.42, ease: "power3.out" }}, t2 + 0.2);
     tl.from("#scene-3 .receipt", {{ y: 82, opacity: 0, duration: 0.64, ease: "expo.out" }}, t2 + 0.36);
     tl.from("#scene-3 .rule", {{ scaleX: 0, duration: 0.48, ease: "power2.out" }}, t2 + 0.9);
+{beat_script}
     tl.to("#scene-3 .receipt", {{ y: -18, opacity: 0, duration: 0.42, ease: "power2.in" }}, D - 0.64);
     window.__timelines["eddy-v2"] = tl;
   </script>
