@@ -216,17 +216,6 @@ def build_bakeoff_report(
     completion_audit = _completion_audit(v2)
     remaining_blockers = completion_audit["remaining_blockers"]
     winner = _winner(completion_audit)
-    report = {
-        "hero_folder": str(folder.resolve()),
-        "winner": winner,
-        "winner_bar": "Lennox would publish it; long edit, motion, audio, and Shorts are each 8/10+.",
-        "current_output_proof": current_output_proof,
-        "candidates": {"eddy_v2": v2, "current_eddy": current},
-        "comparison": comparison,
-        "completion_audit": completion_audit,
-    }
-    (v2_run_dir / "bakeoff.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    (v2_run_dir / "bakeoff.md").write_text(_markdown(report), encoding="utf-8")
     if receipts:
         receipts.log(
             "bakeoff_compare",
@@ -245,6 +234,20 @@ def build_bakeoff_report(
             final_publishability_status=completion_audit["human_review_proof"].get("status", "missing"),
             remaining_blockers=remaining_blockers,
         )
+        v2["receipts"]["row_count"] = len(_receipt_rows(v2_run_dir / "receipts.jsonl"))
+    report = {
+        "hero_folder": str(folder.resolve()),
+        "winner": winner,
+        "winner_bar": "Lennox would publish it; long edit, motion, audio, and Shorts are each 8/10+.",
+        "remaining_blockers": remaining_blockers,
+        "unblock_actions": completion_audit["unblock_actions"],
+        "current_output_proof": current_output_proof,
+        "candidates": {"eddy_v2": v2, "current_eddy": current},
+        "comparison": comparison,
+        "completion_audit": completion_audit,
+    }
+    (v2_run_dir / "bakeoff.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    (v2_run_dir / "bakeoff.md").write_text(_markdown(report), encoding="utf-8")
     return report
 
 
@@ -347,6 +350,7 @@ def _markdown(report: dict[str, Any]) -> str:
         f"- hero_folder: {report['hero_folder']}",
         f"- winner: {report['winner']}",
         f"- winner_bar: {report['winner_bar']}",
+        f"- remaining_blockers: {', '.join(report['remaining_blockers']) if report['remaining_blockers'] else 'none'}",
         f"- current_output_proof: {report['current_output_proof']['status']}",
         "",
         "## Eddy V2",

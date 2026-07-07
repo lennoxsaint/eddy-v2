@@ -1528,12 +1528,21 @@ def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatc
     assert report["current_output_proof"]["reason"] == "current_output_proof_missing"
     assert report["comparison"]["status"] == "current_output_proof_missing"
     assert report["candidates"]["eddy_v2"]["audio_proof"]["quality_status"] == "local_degraded_fallback"
+    assert report["candidates"]["eddy_v2"]["receipts"]["row_count"] == len(rows)
     assert (result.run_dir / "bakeoff.json").exists()
     assert (result.run_dir / "bakeoff.md").exists()
     assert any(row["event"] == "bakeoff_compare" and row["status"] == "missing" for row in rows)
     ranking = next(row for row in rows if row["event"] == "bakeoff_ranking")
     assert ranking["status"] == "blocked"
     assert ranking["winner"] == "blocked_remaining_gates"
+    assert set(report["remaining_blockers"]) == {
+        "cloud_audio_credentials_missing_or_failed",
+        "pending_lennox_8_of_10_review",
+        "strong_studio_sound_not_proven",
+    }
+    persisted_report = json.loads((result.run_dir / "bakeoff.json").read_text(encoding="utf-8"))
+    assert persisted_report["remaining_blockers"] == report["remaining_blockers"]
+    assert "- remaining_blockers: " in (result.run_dir / "bakeoff.md").read_text(encoding="utf-8")
     assert set(ranking["remaining_blockers"]) == {
         "cloud_audio_credentials_missing_or_failed",
         "pending_lennox_8_of_10_review",
@@ -1614,6 +1623,7 @@ def test_bakeoff_selects_v2_after_publishable_review(tmp_path: Path, monkeypatch
     assert reviewed["bakeoff_refresh"]["remaining_blockers"] == []
     assert scorecard["proof_layers"]["final_publishability"]["status"] == "publishable"
     assert report["winner"] == "eddy_v2"
+    assert report["remaining_blockers"] == []
     assert report["current_output_proof"]["run_dir"] == str(current)
     assert report["comparison"]["human_quality_review"] == "pass"
     assert report["completion_audit"]["remaining_blockers"] == []
