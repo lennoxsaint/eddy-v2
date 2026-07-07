@@ -10,7 +10,7 @@ from .audio import polish_extracted_audio
 from .commands import duration_s, ffprobe_json, run_command
 from .cost import CostTracker
 from .policy import RunPolicy
-from .proof import read_json_object, write_audio_proof
+from .proof import audio_gate_blockers, read_json_object, write_audio_proof
 from .qa import validate_long_video
 from .receipts import Receipts
 from .sources import sha256_file
@@ -42,6 +42,19 @@ def _refresh_json_audio(path: Path, audio_proof_path: Path, proof: dict[str, Any
     payload["audio_proof_path"] = str(audio_proof_path)
     payload["audio_proof"] = proof
     if path.name == "scorecard.json":
+        existing_blockers = payload.get("blockers")
+        blockers = existing_blockers if isinstance(existing_blockers, list) else []
+        audio_blocker_names = {
+            "audio_proof_missing",
+            "audio_quality_gate_failed",
+            "audio_polish_receipt_missing",
+            "strong_studio_sound_not_proven",
+            "cloud_audio_credentials_missing_or_failed",
+        }
+        refreshed_blockers = [str(blocker) for blocker in blockers if str(blocker) not in audio_blocker_names]
+        refreshed_blockers.extend(blocker for blocker in audio_gate_blockers(proof) if blocker not in refreshed_blockers)
+        payload["blockers"] = refreshed_blockers
+        payload["status"] = "blocked" if refreshed_blockers else "complete"
         payload["cost"] = cost_summary
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -151,11 +164,16 @@ def retry_audio_proof(run_dir: Path, *, local_only: bool = False, cloud_budget_u
     _refresh_json_audio(run_dir / "scorecard.json", audio_proof_path, proof, cost_summary)
     _refresh_json_audio(run_dir / "final" / "launch-kit" / "launch-kit.json", audio_proof_path, proof, cost_summary)
     _refresh_json_audio(run_dir / "final" / "review" / "review-packet.json", audio_proof_path, proof, cost_summary)
+    refreshed_scorecard = read_json_object(run_dir / "scorecard.json") or {}
+    refreshed_blockers = refreshed_scorecard.get("blockers")
+    blocker_text = ", ".join(str(blocker) for blocker in refreshed_blockers) if isinstance(refreshed_blockers, list) and refreshed_blockers else "none"
+    _rewrite_line(run_dir / "scorecard.md", "- status:", f"- status: {refreshed_scorecard.get('status', 'blocked')}")
     _rewrite_line(run_dir / "scorecard.md", "- cost:", f"- cost: ${cost_summary['spent_usd']:.4f} / ${cost_summary['cap_usd']:.2f}")
     _rewrite_line(run_dir / "scorecard.md", "- audio_quality:", f"- audio_quality: {proof.get('quality_status', 'missing')}")
+    _rewrite_line(run_dir / "scorecard.md", "- blockers:", f"- blockers: {blocker_text}")
     _rewrite_line(run_dir / "final" / "review" / "README.md", "- audio_quality:", f"- audio_quality: {proof.get('quality_status', 'missing')}")
 
-    status = "pass" if proof.get("strong_studio_sound") is True else "blocked"
+    status = "pass" if not audio_gate_blockers(proof) else "blocked"
     result = {
         "run_dir": str(run_dir),
         "status": status,

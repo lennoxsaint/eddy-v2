@@ -11,7 +11,7 @@ from .cost import CostTracker
 from .models import create_intent
 from .plan import create_edit_plan
 from .policy import RunPolicy
-from .proof import read_json_object, write_audio_proof
+from .proof import audio_gate_blockers, read_json_object, write_audio_proof
 from .qa import validate_launch_package
 from .receipts import Receipts
 from .render import render_long, render_shorts
@@ -63,6 +63,24 @@ def edit_folder(
         plan = create_edit_plan(sources, run_dir, intent, receipts)
         video = render_long(sources, run_dir, intent, receipts, policy, cost, plan=plan)
         audio_proof = write_audio_proof(run_dir, receipts)
+        audio_summary = read_json_object(audio_proof)
+        audio_blockers = audio_gate_blockers(audio_summary)
+        if audio_blockers:
+            blockers.extend(blocker for blocker in audio_blockers if blocker not in blockers)
+            receipts.log(
+                "gate",
+                name="audio_quality",
+                status="failed",
+                quality_status=(audio_summary or {}).get("quality_status", "missing"),
+                blockers=audio_blockers,
+            )
+        else:
+            receipts.log(
+                "gate",
+                name="audio_quality",
+                status="pass",
+                quality_status=(audio_summary or {}).get("quality_status"),
+            )
         shorts = render_shorts(sources, run_dir, intent, receipts, plan=plan)
         review_packet = build_review_packet(run_dir, video, shorts, receipts, audio_proof=audio_proof)
         if review_packet is None:

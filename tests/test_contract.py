@@ -19,6 +19,7 @@ from eddy_v2.motion import create_motion_project, run_hyperframes
 from eddy_v2.plan import EditPlan, Segment, create_edit_plan, select_semantic_short_starts, select_short_starts
 from eddy_v2.pipeline import edit_folder
 from eddy_v2.policy import CLOUD_SURFACES, RunPolicy
+from eddy_v2.proof import audio_gate_blockers
 from eddy_v2.qa import validate_motion_artifact, validate_short_video
 from eddy_v2.receipts import Receipts
 from eddy_v2.render import render_shorts
@@ -194,6 +195,8 @@ def test_source_hashing_is_stable(tmp_path: Path):
 def test_run_dir_containment_and_quarantine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     folder = make_layered_fixture(tmp_path / "footage", 3)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
     result = edit_folder(folder, local_only=False, cloud_budget_usd=25.0, target_duration_s=2)
     assert result.status == "complete"
     assert result.run_dir.parent == folder / "eddy-runs"
@@ -223,8 +226,9 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     result = edit_folder(folder, local_only=True, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     gates = {row["name"] for row in rows if row["event"] == "gate" and row["status"] == "pass"}
-    assert result.status == "complete"
+    assert result.status == "blocked"
     assert {"motion_artifact", "motion_visual_qa", "caption_sidecars", "long_media_integrity", "short_media_integrity", "launch_package", "final_media_probe"} <= gates
+    assert any(row["event"] == "gate" and row["name"] == "audio_quality" and row["status"] == "failed" for row in rows)
     assert any(row["event"] == "motion_composite" and row["surface"] == "long" for row in rows)
     assert any(row["event"] == "motion_composite" and row["surface"] == "shorts" for row in rows)
 
@@ -239,7 +243,9 @@ def test_review_packet_is_written_for_completed_run(tmp_path: Path, monkeypatch:
     packet_path = Path(scorecard["review_packet"])
     packet = json.loads(packet_path.read_text(encoding="utf-8"))
 
-    assert result.status == "complete"
+    assert result.status == "blocked"
+    assert scorecard["status"] == "blocked"
+    assert "strong_studio_sound_not_proven" in scorecard["blockers"]
     assert packet_path == result.run_dir / "final" / "review" / "review-packet.json"
     assert launch_kit["review_packet"] == str(packet_path)
     assert scorecard["audio_proof_path"] == str(result.run_dir / "final" / "audio-proof.json")
@@ -328,7 +334,7 @@ def test_timed_caption_artifacts_are_written(tmp_path: Path, monkeypatch: pytest
     captions = json.loads((result.run_dir / "final" / "captions.json").read_text(encoding="utf-8"))
     srt = (result.run_dir / "final" / "subtitles.srt").read_text(encoding="utf-8")
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
-    assert result.status == "complete"
+    assert result.status == "blocked"
     assert len(captions["cues"]) >= 2
     assert "\n2\n" in srt
     assert any(row["event"] == "caption_plan" and row["status"] == "pass" and row.get("cue_count", 0) >= 2 for row in rows)
@@ -340,7 +346,7 @@ def test_short_caption_textfiles_are_written(tmp_path: Path, monkeypatch: pytest
     result = edit_folder(folder, local_only=True, target_duration_s=2)
     short_caption_files = sorted((result.run_dir / "text").glob("short-caption-*.txt"))
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
-    assert result.status == "complete"
+    assert result.status == "blocked"
     assert len(short_caption_files) >= 3
     assert any(row["event"] == "caption_plan" and row.get("surface") == "shorts" and row.get("cue_count") == 3 for row in rows)
 
@@ -384,7 +390,7 @@ def test_transcript_sidecar_drives_semantic_chapters_and_short_starts(tmp_path: 
     launch_kit = json.loads((result.run_dir / "final" / "launch-kit" / "launch-kit.json").read_text(encoding="utf-8"))
     transcript_cues = json.loads((result.run_dir / "transcript-cues.json").read_text(encoding="utf-8"))
 
-    assert result.status == "complete"
+    assert result.status == "blocked"
     assert transcript_cues["source"].endswith("transcript.vtt")
     assert plan["transcript_cue_count"] == 3
     assert [chapter["source"] for chapter in launch_kit["chapters"]] == ["transcript", "transcript", "transcript"]
@@ -413,7 +419,7 @@ def test_audio_extract_uses_planned_long_segment(tmp_path: Path, monkeypatch: py
     result = edit_folder(folder, local_only=True, target_duration_s=3)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     extract = next(row for row in rows if row["event"] == "audio_extract")
-    assert result.status == "complete"
+    assert result.status == "blocked"
     assert extract["start_s"] >= 1.5
     assert extract["duration_s"] == 3
 
@@ -462,6 +468,8 @@ def test_identity_pack_loads():
 def test_shortfall_is_complete_not_filler(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     folder = make_layered_fixture(tmp_path / "footage", 4)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
     result = edit_folder(folder, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     assert result.status == "complete"
@@ -498,7 +506,7 @@ def test_local_only_pipeline_skips_configured_model_key(tmp_path: Path, monkeypa
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     result = edit_folder(folder, local_only=True, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
-    assert result.status == "complete"
+    assert result.status == "blocked"
     assert any(row["event"] == "model_call" and row["status"] == "skipped" and row["reason"] == "local_only" for row in rows)
 
 
@@ -506,6 +514,8 @@ def test_openrouter_editor_critic_loop_can_approve_intent(tmp_path: Path, monkey
     folder = make_layered_fixture(tmp_path / "footage", 3)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
     monkeypatch.setenv(
         "EDDY_V2_FAKE_OPENROUTER_EDITOR_JSON",
         json.dumps(
@@ -533,6 +543,8 @@ def test_openrouter_editor_critic_loop_can_approve_intent(tmp_path: Path, monkey
 def test_openrouter_critic_can_repair_invalid_editor_intent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     folder = make_layered_fixture(tmp_path / "footage", 3)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv(
         "EDDY_V2_FAKE_OPENROUTER_EDITOR_JSON",
@@ -629,6 +641,8 @@ def test_host_intent_path_skips_openrouter_and_receipts_payload(tmp_path: Path, 
     folder = make_layered_fixture(tmp_path / "footage", 3)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
 
     started = mcp_json(
         handle(
@@ -710,10 +724,10 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
     artifacts = mcp_json(handle("tools/call", {"name": "eddy_v2_artifacts", "arguments": {"run_dir": str(run_dir)}}))
     scorecard = handle("tools/call", {"name": "eddy_v2_scorecard", "arguments": {"run_dir": str(run_dir)}})["content"][0]["text"]
 
-    assert started["status"] == "complete"
-    assert started["blockers"] == []
+    assert started["status"] == "blocked"
+    assert "cloud_audio_credentials_missing_or_failed" in started["blockers"]
     assert "code-cinema" in doctor["identities"]
-    assert status["status"] == "complete"
+    assert status["status"] == "blocked"
     assert "final/video.mp4" in artifacts["files"]
     assert "scorecard.json" in artifacts["files"]
     assert "# Eddy V2 Scorecard" in scorecard
@@ -808,8 +822,8 @@ def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, mo
         )
     )
 
-    assert result["status"] == "complete"
-    assert result["blockers"] == []
+    assert result["status"] == "blocked"
+    assert "cloud_audio_credentials_missing_or_failed" in result["blockers"]
     assert result["current_output_proof"]["status"] == "missing"
     assert result["winner"] == "undecided_pending_lennox_8_of_10_review"
     assert Path(result["bakeoff_json"]).exists()
@@ -838,6 +852,18 @@ def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest
     assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
 
 
+def test_audio_gate_blocks_only_missing_or_local_degraded_audio():
+    assert audio_gate_blockers({"quality_status": "strong_studio_sound"}) == []
+    assert audio_gate_blockers({"quality_status": "cloud_audio_fallback"}) == []
+    assert audio_gate_blockers(None) == ["audio_proof_missing"]
+    assert audio_gate_blockers(
+        {
+            "quality_status": "local_degraded_fallback",
+            "quality_blockers": ["strong_studio_sound_not_proven", "cloud_audio_credentials_missing_or_failed"],
+        }
+    ) == ["strong_studio_sound_not_proven", "cloud_audio_credentials_missing_or_failed"]
+
+
 def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     folder = make_layered_fixture(tmp_path / "footage", 3)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
@@ -861,6 +887,8 @@ def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_pat
     assert list((result.run_dir / "quarantine").glob("video-before-audio-proof-retry-*.mp4"))
     assert audio_proof["quality_status"] == "strong_studio_sound"
     assert audio_proof["quality_blockers"] == []
+    assert scorecard["status"] == "complete"
+    assert scorecard["blockers"] == []
     assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
     assert launch_kit["audio_proof"]["quality_status"] == "strong_studio_sound"
     assert packet["audio_proof"]["quality_status"] == "strong_studio_sound"
@@ -881,6 +909,9 @@ def test_audio_proof_retry_local_only_refuses_cloud_without_fake_upload(tmp_path
 
     assert retry["status"] == "blocked"
     assert retry["quality_status"] == "local_degraded_fallback"
+    scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
+    assert scorecard["status"] == "blocked"
+    assert "cloud_audio_credentials_missing_or_failed" in scorecard["blockers"]
     assert any(row["event"] == "cloud_refused" and row["surface"] == "descript" for row in rows)
     assert not any(row["event"] == "descript_import" for row in rows)
     assert not any(row["event"] == "audio_retry_remux" and row["status"] == "pass" for row in rows)
@@ -939,7 +970,7 @@ def test_local_only_refuses_configured_cloud_audio_without_upload(tmp_path: Path
     monkeypatch.setenv("EDDY_V2_FAKE_ELEVENLABS", "1")
     result = edit_folder(folder, local_only=True, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
-    assert result.status == "complete"
+    assert result.status == "blocked"
     assert any(row["event"] == "cloud_refused" and row["surface"] == "descript" for row in rows)
     assert any(row["event"] == "cloud_refused" and row["surface"] == "auphonic" for row in rows)
     assert any(row["event"] == "cloud_refused" and row["surface"] == "elevenlabs" for row in rows)

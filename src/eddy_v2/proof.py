@@ -17,6 +17,17 @@ CLOUD_FALLBACK_BACKENDS = {"auphonic", "elevenlabs_audio_isolation"}
 LOCAL_FALLBACK_BACKEND = "local_loudnorm_fallback"
 
 
+def audio_gate_blockers(audio_summary: dict[str, Any] | None) -> list[str]:
+    if not audio_summary:
+        return ["audio_proof_missing"]
+    if audio_summary.get("quality_status") in {"strong_studio_sound", "cloud_audio_fallback"}:
+        return []
+    quality_blockers = audio_summary.get("quality_blockers")
+    if isinstance(quality_blockers, list) and quality_blockers:
+        return [str(blocker) for blocker in quality_blockers]
+    return ["audio_quality_gate_failed"]
+
+
 def _latest(rows: list[dict[str, Any]], event: str) -> dict[str, Any] | None:
     for row in reversed(rows):
         if row.get("event") == event:
