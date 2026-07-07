@@ -49,5 +49,8 @@ jobs:
       - name: Public scrub
         run: python scripts/public_scrub_check.py
 
+      - name: Contract audit
+        run: python scripts/contract_audit.py
+
       - name: Whitespace and conflict markers
         run: git diff --check

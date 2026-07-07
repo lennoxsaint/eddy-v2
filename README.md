@@ -46,6 +46,8 @@ eddy bakeoff /path/to/footage --current-run /Users/lennoxsaint/eddy/runs/<run>
 
 `--local-only` refuses OpenRouter, Descript, Auphonic, ElevenLabs, cloud render, and image/model uploads. Cloud quality mode is otherwise allowed by default when credentials are configured and cost-capped.
 
+Run `python scripts/contract_audit.py` before public handoff. It checks the repo-scope contract: MIT license, no runtime dependencies, permissive build/dev dependencies, required CLI and MCP surfaces, the six frozen identities, required docs/ADRs/skill files, and absence of social/video publishing integrations.
+
 ## Model Autonomy
 
 When `OPENROUTER_API_KEY` is configured, Eddy runs a bounded editor+critic loop before rendering: the editor proposes `intent.json`, the critic approves or returns a repair object, and the final intent is clamped back to frozen identities and source duration. The loop is fully receipted and cost-capped. Eddy does not run a model council on every edit; escalation belongs in the bakeoff workflow after repeated failures.

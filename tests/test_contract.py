@@ -972,6 +972,19 @@ def test_public_scrub_check_runs():
     assert "public scrub passed" in proc.stdout
 
 
+def test_contract_audit_runs():
+    proc = subprocess.run(
+        [sys.executable, "scripts/contract_audit.py"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    payload = json.loads(proc.stdout)
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    assert payload["status"] == "pass"
+    assert all(payload["checks"].values())
+
+
 def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     folder = make_layered_fixture(tmp_path / "footage", 3)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
