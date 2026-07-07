@@ -5,12 +5,22 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 from . import __version__
 from .bakeoff import build_bakeoff_report
 from .identities import list_identities
 from .pipeline import edit_folder
 from .receipts import Receipts
+
+
+def load_intent_payload(path: str | None) -> dict[str, Any] | None:
+    if not path:
+        return None
+    parsed = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(parsed, dict):
+        raise ValueError(f"intent payload must be a JSON object: {path}")
+    return parsed
 
 
 def doctor(_args: argparse.Namespace) -> int:
@@ -32,6 +42,7 @@ def edit(args: argparse.Namespace) -> int:
         local_only=args.local_only,
         cloud_budget_usd=args.cloud_budget,
         target_duration_s=args.target_duration,
+        host_intent_payload=load_intent_payload(args.intent),
     )
     print(json.dumps({"run_dir": str(result.run_dir), "status": result.status, "blockers": result.blockers}, indent=2))
     return 0 if result.status == "complete" else 2
@@ -70,6 +81,7 @@ def bakeoff(args: argparse.Namespace) -> int:
         local_only=args.local_only,
         cloud_budget_usd=args.cloud_budget,
         target_duration_s=args.target_duration,
+        host_intent_payload=load_intent_payload(args.intent),
     )
     report = build_bakeoff_report(
         folder=Path(args.folder),
@@ -103,6 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--local-only", action="store_true")
         p.add_argument("--cloud-budget", type=float, default=25.0)
         p.add_argument("--target-duration", type=float, default=None)
+        p.add_argument("--intent", default=None, help="Path to a host-agent EditIntent JSON object")
         if name == "bakeoff":
             p.add_argument("--current-run", default=None)
         p.set_defaults(func=func)

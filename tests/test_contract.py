@@ -592,6 +592,43 @@ def test_openrouter_default_autonomy_preserves_youtube_floor(tmp_path: Path, mon
     )
 
 
+def test_host_intent_path_skips_openrouter_and_receipts_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    started = mcp_json(
+        handle(
+            "tools/call",
+            {
+                "name": "eddy_v2_edit_start",
+                "arguments": {
+                    "folder": str(folder),
+                    "target_duration": 2,
+                    "intent": {
+                        "target_duration_s": 2,
+                        "identity": "broadcast-receipts",
+                        "shorts_target": 1,
+                        "hook": "Host agent supplied the final edit intent",
+                        "title": "Host Intent Edit",
+                    },
+                },
+            },
+        )
+    )
+    run_dir = Path(started["run_dir"])
+    rows = Receipts(run_dir / "receipts.jsonl").read_all()
+    intent = json.loads((run_dir / "intent.json").read_text(encoding="utf-8"))
+
+    assert started["status"] == "complete"
+    assert intent["identity"] == "broadcast-receipts"
+    assert intent["hook"] == "Host agent supplied the final edit intent"
+    assert any(row["event"] == "host_intent" and row["status"] == "received" for row in rows)
+    assert any(row["event"] == "host_intent" and row["status"] == "accepted" for row in rows)
+    assert any(row["event"] == "model_call" and row["status"] == "skipped" and row["reason"] == "host_intent_supplied" for row in rows)
+    assert not any(row["event"] == "model_call" and row.get("role") in {"editor", "critic"} for row in rows)
+
+
 def test_mcp_schemas_match_cli_surface():
     names = {tool["name"] for tool in TOOLS}
     assert names == {

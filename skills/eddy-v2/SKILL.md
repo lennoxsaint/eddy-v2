@@ -14,6 +14,17 @@ Use MCP tools first when available. Fall back to the CLI.
 3. Read `<folder>/eddy-runs/<run>/scorecard.md`.
 4. If status is blocked, report the exact blocker and receipts path.
 
+## Host-agent intent path
+
+If you have enough context to provide or repair the edit intent yourself, pass a JSON object with
+`target_duration_s`, `identity`, `shorts_target`, `hook`, and `title`:
+
+- MCP: call `eddy_v2_edit_start` with `intent` or `intent_json`.
+- CLI fallback: write the object to a local file and run `eddy edit <folder> --intent <intent.json>`.
+
+Eddy validates the host intent against frozen identities, source duration, and the default YouTube
+floor, records `host_intent` receipts, and skips OpenRouter for that run.
+
 ## Hard boundaries
 
 - Never edit, move, delete, or overwrite raw source files.

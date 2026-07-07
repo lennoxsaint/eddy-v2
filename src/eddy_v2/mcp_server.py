@@ -28,6 +28,8 @@ TOOLS = [
                 "local_only": {"type": "boolean"},
                 "cloud_budget": {"type": "number"},
                 "target_duration": {"type": "number"},
+                "intent": {"type": "object"},
+                "intent_json": {"type": "string"},
             },
             "required": ["folder"],
         },
@@ -70,6 +72,8 @@ TOOLS = [
                 "cloud_budget": {"type": "number"},
                 "target_duration": {"type": "number"},
                 "current_run": {"type": "string"},
+                "intent": {"type": "object"},
+                "intent_json": {"type": "string"},
             },
             "required": ["folder"],
         },
@@ -118,12 +122,27 @@ def _scorecard_text(run_dir: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _host_intent_payload(args: dict[str, Any]) -> dict[str, Any] | None:
+    if "intent" in args and args["intent"] is not None:
+        intent = args["intent"]
+        if not isinstance(intent, dict):
+            raise ValueError("intent must be a JSON object")
+        return intent
+    if args.get("intent_json"):
+        parsed = json.loads(str(args["intent_json"]))
+        if not isinstance(parsed, dict):
+            raise ValueError("intent_json must decode to a JSON object")
+        return parsed
+    return None
+
+
 def _edit_payload(args: dict[str, Any]) -> dict[str, Any]:
     result = edit_folder(
         Path(args["folder"]),
         local_only=bool(args.get("local_only", False)),
         cloud_budget_usd=float(args.get("cloud_budget", 25.0)),
         target_duration_s=args.get("target_duration"),
+        host_intent_payload=_host_intent_payload(args),
     )
     return {"run_dir": str(result.run_dir), "status": result.status, "blockers": result.blockers}
 
@@ -134,6 +153,7 @@ def _bakeoff_payload(args: dict[str, Any]) -> dict[str, Any]:
         local_only=bool(args.get("local_only", False)),
         cloud_budget_usd=float(args.get("cloud_budget", 25.0)),
         target_duration_s=args.get("target_duration"),
+        host_intent_payload=_host_intent_payload(args),
     )
     report = build_bakeoff_report(
         folder=Path(args["folder"]),

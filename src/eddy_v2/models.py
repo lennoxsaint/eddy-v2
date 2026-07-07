@@ -128,6 +128,28 @@ def _intent_from_model_payload(
     )
 
 
+def intent_from_host_payload(
+    parsed: dict[str, Any],
+    sources: Sources,
+    fallback: EditIntent,
+    receipts: Receipts,
+    *,
+    min_target_duration_s: float | None = None,
+    min_shorts_target: int | None = None,
+) -> EditIntent:
+    receipts.log("host_intent", status="received", keys=sorted(parsed.keys()))
+    intent = _intent_from_model_payload(
+        parsed,
+        sources,
+        fallback,
+        receipts,
+        min_target_duration_s=min_target_duration_s,
+        min_shorts_target=min_shorts_target,
+    )
+    receipts.log("host_intent", status="accepted", intent=intent.as_dict())
+    return intent
+
+
 def _call_openrouter_json(
     *,
     role: str,
@@ -218,9 +240,22 @@ def create_intent(
     cost: CostTracker,
     *,
     target_duration_s: float | None = None,
+    host_intent_payload: dict[str, Any] | None = None,
 ) -> EditIntent:
     fallback = default_intent(sources, target_duration_s=target_duration_s)
     default_youtube_floor = target_duration_s is None
+    if host_intent_payload is not None:
+        intent = intent_from_host_payload(
+            host_intent_payload,
+            sources,
+            fallback,
+            receipts,
+            min_target_duration_s=fallback.target_duration_s if default_youtube_floor else None,
+            min_shorts_target=fallback.shorts_target if default_youtube_floor else None,
+        )
+        receipts.log("model_call", provider="openrouter", status="skipped", reason="host_intent_supplied")
+        (run_dir / "intent.json").write_text(json.dumps(intent.as_dict(), indent=2), encoding="utf-8")
+        return intent
     prompt = {
         "sources": sources.as_dict(),
         "target_duration_s": target_duration_s,

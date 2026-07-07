@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from .commands import ffprobe_json
 from .cost import CostTracker
@@ -34,6 +35,7 @@ def edit_folder(
     local_only: bool = False,
     cloud_budget_usd: float = 25.0,
     target_duration_s: float | None = None,
+    host_intent_payload: dict[str, Any] | None = None,
 ) -> RunResult:
     sources = discover_sources(folder)
     run_dir = sources.folder / "eddy-runs" / run_slug(sources.folder)
@@ -47,7 +49,15 @@ def edit_folder(
     before = lock_sources(sources, receipts, phase="before")
     write_manifest(run_dir, sources, before)
     try:
-        intent = create_intent(sources, run_dir, receipts, policy, cost, target_duration_s=target_duration_s)
+        intent = create_intent(
+            sources,
+            run_dir,
+            receipts,
+            policy,
+            cost,
+            target_duration_s=target_duration_s,
+            host_intent_payload=host_intent_payload,
+        )
         plan = create_edit_plan(sources, run_dir, intent, receipts)
         video = render_long(sources, run_dir, intent, receipts, policy, cost, plan=plan)
         shorts = render_shorts(sources, run_dir, intent, receipts, plan=plan)
