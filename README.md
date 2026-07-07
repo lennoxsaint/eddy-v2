@@ -50,7 +50,7 @@ eddy bakeoff /path/to/footage
 eddy bakeoff /path/to/footage --current-run /Users/lennoxsaint/eddy/runs/<run>
 ```
 
-Read commands accept `--json` for explicit machine-readable output; `eddy scorecard <run> --json` returns `scorecard.json` instead of the default Markdown scorecard.
+Read commands and proof retry commands accept `--json` for explicit machine-readable output; `eddy scorecard <run> --json` returns `scorecard.json` instead of the default Markdown scorecard.
 
 `--local-only` refuses OpenRouter, Descript, Auphonic, ElevenLabs, cloud render, and image/model uploads. Cloud quality mode is otherwise allowed by default when credentials are configured and cost-capped.
 
@@ -99,7 +99,7 @@ so a blocked run explains the exact credential options without exposing token va
 `credential_helpers.onepassword_cli` status using a bounded `op whoami` check, so operators can tell
 whether 1Password CLI is installed and signed in before trying a Studio Sound retry.
 
-Use `eddy audio-proof <run>` when a run already exists but Studio Sound credentials become available later. It reuses `audio/source-audio.wav`, verifies source hashes from `manifest.json`, retries Descript/Auphonic/ElevenLabs under the same cost cap, remuxes `final/video.mp4` when cloud audio passes, backs up the previous long video in `quarantine/`, and refreshes `final/audio-proof.json`, the scorecard, launch kit, and review packet. `eddy audio-proof --local-only <run>` refuses cloud audio before upload/fake-provider branches and leaves the existing proof blockers in place.
+Use `eddy audio-proof <run>` when a run already exists but Studio Sound credentials become available later. It reuses `audio/source-audio.wav`, verifies source hashes from `manifest.json`, retries Descript/Auphonic/ElevenLabs under the same cost cap, remuxes `final/video.mp4` when cloud audio passes, backs up the previous long video in `quarantine/`, and refreshes `final/audio-proof.json`, the scorecard, launch kit, and review packet. `eddy audio-proof <run> --json` makes the blocked/pass result explicit for agents. `eddy audio-proof --local-only <run>` refuses cloud audio before upload/fake-provider branches and leaves the existing proof blockers in place.
 
 For dry tests, set `EDDY_V2_FAKE_DESCRIPT=1`, `EDDY_V2_FAKE_AUPHONIC=1`, or `EDDY_V2_FAKE_ELEVENLABS=1` with dummy provider credentials; this exercises the same receipt/parity path without network egress or credits. `--local-only` refuses all cloud audio providers even when fake mode is present.
 

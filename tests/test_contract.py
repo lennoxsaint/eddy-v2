@@ -1136,6 +1136,12 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    cli_audio_proof = subprocess.run(
+        [sys.executable, "-m", "eddy_v2.cli", "audio-proof", str(run_dir), "--local-only", "--json"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
     assert started["status"] == "blocked"
     assert "cloud_audio_credentials_missing_or_failed" in started["blockers"]
@@ -1169,9 +1175,13 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
     assert cli_status.returncode == 0, cli_status.stderr
     assert cli_artifacts.returncode == 0, cli_artifacts.stderr
     assert cli_scorecard.returncode == 0, cli_scorecard.stderr
+    assert cli_audio_proof.returncode == 2, cli_audio_proof.stderr
     assert json.loads(cli_status.stdout)["status"] == status["status"]
     assert json.loads(cli_artifacts.stdout)["files"] == artifacts["files"]
     assert json.loads(cli_scorecard.stdout)["status"] == "blocked"
+    cli_audio_payload = json.loads(cli_audio_proof.stdout)
+    assert cli_audio_payload["status"] == "blocked"
+    assert cli_audio_payload["quality_status"] == "local_degraded_fallback"
 
 
 def test_review_command_records_scores_but_keeps_audio_blocker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -1504,9 +1514,11 @@ def test_agent_write_commands_accept_explicit_json_flag():
 
     edit_args = parser.parse_args(["edit", "/tmp/footage", "--json"])
     bakeoff_args = parser.parse_args(["bakeoff", "/tmp/footage", "--json"])
+    audio_proof_args = parser.parse_args(["audio-proof", "/tmp/run", "--json"])
 
     assert edit_args.json is True
     assert bakeoff_args.json is True
+    assert audio_proof_args.json is True
 
 
 def test_node_hyperframes_renderer_contract():
