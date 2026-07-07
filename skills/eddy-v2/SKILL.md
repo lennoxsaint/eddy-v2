@@ -13,7 +13,8 @@ Use MCP tools first when available. Fall back to the CLI.
 2. Run `eddy edit <folder>` for autonomous editing.
 3. Read `<folder>/eddy-runs/<run>/scorecard.md`.
 4. If status is blocked, report the exact blocker and receipts path.
-5. If Lennox gives 8/10 quality scores, record them with `eddy review <run>` instead of editing the scorecard by hand.
+5. If Studio Sound credentials become available after a run, use `eddy audio-proof <run>` to retry cloud audio proof from the existing extracted WAV instead of rerunning the full edit.
+6. If Lennox gives 8/10 quality scores, record them with `eddy review <run>` instead of editing the scorecard by hand.
 
 ## Host-agent intent path
 
@@ -31,6 +32,13 @@ floor, records `host_intent` receipts, and skips OpenRouter for that run.
 `eddy review <run> --long-edit <score> --motion <score> --audio <score> --shorts <score>` records the
 human bakeoff verdict. The command keeps `publishable_8_of_10` false when any score is below 8 or
 when machine/audio quality blockers such as `strong_studio_sound_not_proven` remain.
+
+## Audio proof retry
+
+`eddy audio-proof <run>` verifies the run's source hashes, reuses `audio/source-audio.wav`, retries the
+configured cloud audio providers under the current cost cap, and remuxes `final/video.mp4` only when
+cloud audio passes parity. Use `--local-only` when cloud egress is forbidden; it will refuse provider
+branches and keep the existing audio blockers.
 
 ## Hard boundaries
 

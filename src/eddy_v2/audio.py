@@ -485,6 +485,59 @@ def _try_elevenlabs_isolation(extracted: Path, run_dir: Path, receipts: Receipts
         return None
 
 
+def polish_extracted_audio(
+    extracted: Path,
+    run_dir: Path,
+    receipts: Receipts,
+    policy: RunPolicy,
+    cost: CostTracker,
+    *,
+    allow_local_fallback: bool,
+) -> Path | None:
+    audio_dir = run_dir / "audio"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    descript_audio = _try_descript_studio_sound(extracted, run_dir, receipts, policy, cost)
+    if descript_audio:
+        receipts.log("audio_polish", status="pass", selected_backend="descript_studio_sound", output=str(descript_audio))
+        return descript_audio
+
+    auphonic_audio = _try_auphonic_polish(extracted, run_dir, receipts, policy, cost)
+    if auphonic_audio:
+        receipts.log("audio_polish", status="pass", selected_backend="auphonic", output=str(auphonic_audio))
+        return auphonic_audio
+
+    elevenlabs_audio = _try_elevenlabs_isolation(extracted, run_dir, receipts, policy, cost)
+    if elevenlabs_audio:
+        receipts.log("audio_polish", status="pass", selected_backend="elevenlabs_audio_isolation", output=str(elevenlabs_audio))
+        return elevenlabs_audio
+
+    if not allow_local_fallback:
+        receipts.log("audio_polish_retry", status="blocked", reason="no_cloud_audio_provider_passed", source_audio=str(extracted))
+        return None
+
+    polished = audio_dir / "polished-audio.m4a"
+    run_command(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(extracted),
+            "-af",
+            "highpass=f=80,acompressor=threshold=-20dB:ratio=3:attack=5:release=80,loudnorm=I=-14:TP=-1.5:LRA=11",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            str(polished),
+        ],
+        receipts,
+        event="ffmpeg",
+        timeout_s=900,
+    )
+    receipts.log("audio_polish", status="pass", selected_backend="local_loudnorm_fallback", output=str(polished))
+    return polished
+
+
 def polish_audio(
     sources: Sources,
     run_dir: Path,
@@ -518,39 +571,7 @@ def polish_audio(
         timeout_s=900,
     )
 
-    descript_audio = _try_descript_studio_sound(extracted, run_dir, receipts, policy, cost)
-    if descript_audio:
-        receipts.log("audio_polish", status="pass", selected_backend="descript_studio_sound", output=str(descript_audio))
-        return descript_audio
-
-    auphonic_audio = _try_auphonic_polish(extracted, run_dir, receipts, policy, cost)
-    if auphonic_audio:
-        receipts.log("audio_polish", status="pass", selected_backend="auphonic", output=str(auphonic_audio))
-        return auphonic_audio
-
-    elevenlabs_audio = _try_elevenlabs_isolation(extracted, run_dir, receipts, policy, cost)
-    if elevenlabs_audio:
-        receipts.log("audio_polish", status="pass", selected_backend="elevenlabs_audio_isolation", output=str(elevenlabs_audio))
-        return elevenlabs_audio
-
-    polished = audio_dir / "polished-audio.m4a"
-    run_command(
-        [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(extracted),
-            "-af",
-            "highpass=f=80,acompressor=threshold=-20dB:ratio=3:attack=5:release=80,loudnorm=I=-14:TP=-1.5:LRA=11",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            str(polished),
-        ],
-        receipts,
-        event="ffmpeg",
-        timeout_s=900,
-    )
-    receipts.log("audio_polish", status="pass", selected_backend="local_loudnorm_fallback", output=str(polished))
+    polished = polish_extracted_audio(extracted, run_dir, receipts, policy, cost, allow_local_fallback=True)
+    if polished is None:
+        raise RuntimeError("audio_polish_missing")
     return polished

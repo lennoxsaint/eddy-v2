@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .audio_retry import retry_audio_proof
 from .bakeoff import build_bakeoff_report
 from .identities import list_identities
 from .pipeline import edit_folder
@@ -122,6 +123,16 @@ def review(args: argparse.Namespace) -> int:
     return 0 if result["publishable_8_of_10"] else 2
 
 
+def audio_proof(args: argparse.Namespace) -> int:
+    result = retry_audio_proof(
+        Path(args.run_dir),
+        local_only=args.local_only,
+        cloud_budget_usd=args.cloud_budget,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result["status"] == "pass" else 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="eddy", description="Eddy V2 proof-gated editor")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -149,6 +160,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--reviewer", default="Lennox")
     p.add_argument("--notes", default="")
     p.set_defaults(func=review)
+    p = sub.add_parser("audio-proof")
+    p.add_argument("run_dir")
+    p.add_argument("--local-only", action="store_true")
+    p.add_argument("--cloud-budget", type=float, default=25.0)
+    p.set_defaults(func=audio_proof)
     return parser
 
 

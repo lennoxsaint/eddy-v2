@@ -66,6 +66,8 @@ If Descript is missing or fails parity, Eddy tries Auphonic when `AUPHONIC_API_K
 
 Every completed run writes `final/audio-proof.json`. It records the selected backend, each provider parity result, whether Strong Studio Sound was proven, and any publishability quality blockers such as `strong_studio_sound_not_proven`. A local fallback can keep the machine run complete, but it cannot satisfy the human bakeoff bar by itself.
 
+Use `eddy audio-proof <run>` when a run already exists but Studio Sound credentials become available later. It reuses `audio/source-audio.wav`, verifies source hashes from `manifest.json`, retries Descript/Auphonic/ElevenLabs under the same cost cap, remuxes `final/video.mp4` when cloud audio passes, backs up the previous long video in `quarantine/`, and refreshes `final/audio-proof.json`, the scorecard, launch kit, and review packet. `eddy audio-proof --local-only <run>` refuses cloud audio before upload/fake-provider branches and leaves the existing proof blockers in place.
+
 For dry tests, set `EDDY_V2_FAKE_DESCRIPT=1`, `EDDY_V2_FAKE_AUPHONIC=1`, or `EDDY_V2_FAKE_ELEVENLABS=1` with dummy provider credentials; this exercises the same receipt/parity path without network egress or credits. `--local-only` refuses all cloud audio providers even when fake mode is present.
 
 ## Proof Gates

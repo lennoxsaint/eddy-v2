@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .audio_retry import retry_audio_proof
 from .bakeoff import build_bakeoff_report
 from .identities import list_identities
 from .pipeline import edit_folder
@@ -94,6 +95,19 @@ TOOLS = [
                 "notes": {"type": "string"},
             },
             "required": ["run_dir", "long_edit", "motion", "audio", "shorts"],
+        },
+    },
+    {
+        "name": "eddy_v2_audio_proof",
+        "description": "Retry cloud audio proof for an existing run using only the extracted WAV, then remux the final long video if Strong Studio Sound passes.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_dir": {"type": "string"},
+                "local_only": {"type": "boolean"},
+                "cloud_budget": {"type": "number"},
+            },
+            "required": ["run_dir"],
         },
     },
 ]
@@ -204,6 +218,14 @@ def _review_payload(args: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _audio_proof_payload(args: dict[str, Any]) -> dict[str, Any]:
+    return retry_audio_proof(
+        Path(args["run_dir"]),
+        local_only=bool(args.get("local_only", False)),
+        cloud_budget_usd=float(args.get("cloud_budget", 25.0)),
+    )
+
+
 def handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
     if method == "tools/list":
         return {"tools": TOOLS}
@@ -224,6 +246,8 @@ def handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
             return _json_content(_bakeoff_payload(args))
         if name == "eddy_v2_review":
             return _json_content(_review_payload(args))
+        if name == "eddy_v2_audio_proof":
+            return _json_content(_audio_proof_payload(args))
     raise ValueError(f"unsupported MCP method/tool: {method}")
 
 

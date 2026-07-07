@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import eddy_v2.bakeoff as bakeoff_module
+from eddy_v2.audio_retry import retry_audio_proof
 from eddy_v2.bakeoff import build_bakeoff_report
 from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json
@@ -671,6 +672,7 @@ def test_mcp_schemas_match_cli_surface():
         "eddy_v2_scorecard",
         "eddy_v2_bakeoff",
         "eddy_v2_review",
+        "eddy_v2_audio_proof",
     }
     for tool in TOOLS:
         assert tool["inputSchema"]["type"] == "object"
@@ -682,6 +684,7 @@ def test_mcp_schemas_match_cli_surface():
     assert required["eddy_v2_scorecard"] == ["run_dir"]
     assert required["eddy_v2_bakeoff"] == ["folder"]
     assert required["eddy_v2_review"] == ["run_dir", "long_edit", "motion", "audio", "shorts"]
+    assert required["eddy_v2_audio_proof"] == ["run_dir"]
 
 
 def mcp_json(result: dict) -> dict:
@@ -833,6 +836,54 @@ def test_mocked_descript_paths_are_receipted(tmp_path: Path, monkeypatch: pytest
     assert audio_proof["strong_studio_sound"] is True
     assert audio_proof["quality_blockers"] == []
     assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
+
+
+def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
+    retry = retry_audio_proof(result.run_dir)
+
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    audio_proof = json.loads((result.run_dir / "final" / "audio-proof.json").read_text(encoding="utf-8"))
+    scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
+    launch_kit = json.loads((result.run_dir / "final" / "launch-kit" / "launch-kit.json").read_text(encoding="utf-8"))
+    packet = json.loads((result.run_dir / "final" / "review" / "review-packet.json").read_text(encoding="utf-8"))
+
+    assert retry["status"] == "pass"
+    assert retry["strong_studio_sound"] is True
+    assert sum(1 for row in rows if row["event"] == "audio_extract") == 1
+    assert any(row["event"] == "source_hash" and row["phase"] == "audio_proof_retry" for row in rows)
+    assert any(row["event"] == "audio_retry_remux" and row["status"] == "pass" for row in rows)
+    assert list((result.run_dir / "quarantine").glob("video-before-audio-proof-retry-*.mp4"))
+    assert audio_proof["quality_status"] == "strong_studio_sound"
+    assert audio_proof["quality_blockers"] == []
+    assert scorecard["audio_proof"]["quality_status"] == "strong_studio_sound"
+    assert launch_kit["audio_proof"]["quality_status"] == "strong_studio_sound"
+    assert packet["audio_proof"]["quality_status"] == "strong_studio_sound"
+
+
+def test_audio_proof_retry_local_only_refuses_cloud_without_fake_upload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+
+    monkeypatch.setenv("DESCRIPT_API_KEY", "test-key")
+    monkeypatch.setenv("EDDY_V2_FAKE_DESCRIPT", "1")
+    retry = retry_audio_proof(result.run_dir, local_only=True)
+
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    audio_proof = json.loads((result.run_dir / "final" / "audio-proof.json").read_text(encoding="utf-8"))
+
+    assert retry["status"] == "blocked"
+    assert retry["quality_status"] == "local_degraded_fallback"
+    assert any(row["event"] == "cloud_refused" and row["surface"] == "descript" for row in rows)
+    assert not any(row["event"] == "descript_import" for row in rows)
+    assert not any(row["event"] == "audio_retry_remux" and row["status"] == "pass" for row in rows)
+    assert "strong_studio_sound_not_proven" in audio_proof["quality_blockers"]
 
 
 def test_mocked_auphonic_fallback_is_selected_after_descript_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
