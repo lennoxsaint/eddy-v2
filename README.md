@@ -1,5 +1,7 @@
 # Eddy V2
 
+[![CI](https://github.com/lennoxsaint/eddy-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/lennoxsaint/eddy-v2/actions/workflows/ci.yml)
+
 **Raw creator footage in. Proof-gated YouTube package out.**
 
 Eddy V2 is a cloud-first, source-safe agentic video editor. It produces an edited long-form YouTube video, quality-gated Shorts, sidecar subtitles, launch metadata, a scorecard, and receipts. If it cannot prove the package is safe and creator-good, it returns exact blockers instead of pretending.
