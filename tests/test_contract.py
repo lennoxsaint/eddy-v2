@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+import eddy_v2.bakeoff as bakeoff_module
+from eddy_v2.bakeoff import build_bakeoff_report
 from eddy_v2.cost import CostTracker
 from eddy_v2.commands import ffprobe_json
 from eddy_v2.identities import SLUGS, list_identities, load_identity
@@ -594,3 +596,47 @@ def test_public_scrub_check_runs():
     )
     assert proc.returncode == 0
     assert "public scrub passed" in proc.stdout
+
+
+def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setattr(bakeoff_module, "CURRENT_EDDY_RUNS", tmp_path / "empty-current-runs")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+    report = build_bakeoff_report(folder=folder, v2_run_dir=result.run_dir, receipts=Receipts(result.run_dir / "receipts.jsonl"))
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+
+    assert report["current_output_proof"]["status"] == "missing"
+    assert report["current_output_proof"]["reason"] == "current_output_proof_missing"
+    assert report["comparison"]["status"] == "current_output_proof_missing"
+    assert (result.run_dir / "bakeoff.json").exists()
+    assert (result.run_dir / "bakeoff.md").exists()
+    assert any(row["event"] == "bakeoff_compare" and row["status"] == "missing" for row in rows)
+
+
+def test_bakeoff_compares_explicit_current_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 20)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    result = edit_folder(folder, local_only=True, target_duration_s=2)
+    current = tmp_path / "current-eddy-run"
+    (current / "final" / "shorts").mkdir(parents=True)
+    (current / "final").mkdir(exist_ok=True)
+    (current / "final" / "video.mp4").write_bytes((folder / "camera.mp4").read_bytes())
+    (current / "final" / "shorts" / "short-01.mp4").write_bytes((folder / "camera.mp4").read_bytes())
+    (current / "scorecard.json").write_text(
+        json.dumps({"status": "complete", "blockers": [], "cost": {"spent_usd": 0.0, "cap_usd": 25.0}}),
+        encoding="utf-8",
+    )
+    Receipts(current / "receipts.jsonl").log("run_opened", sources={"camera": str(folder / "camera.mp4"), "screen": str(folder / "screen.mp4")})
+
+    report = build_bakeoff_report(
+        folder=folder,
+        v2_run_dir=result.run_dir,
+        current_run_dir=current,
+        receipts=Receipts(result.run_dir / "receipts.jsonl"),
+    )
+
+    assert report["current_output_proof"]["status"] == "compared"
+    assert report["candidates"]["current_eddy"]["shorts_count"] == 1
+    assert report["comparison"]["status"] == "metrics_compared"
+    assert report["comparison"]["shorts_count_delta"] == 2

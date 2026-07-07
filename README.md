@@ -37,6 +37,7 @@ eddy status /path/to/footage/eddy-runs/<run>
 eddy artifacts /path/to/footage/eddy-runs/<run>
 eddy scorecard /path/to/footage/eddy-runs/<run>
 eddy bakeoff /path/to/footage
+eddy bakeoff /path/to/footage --current-run /Users/lennoxsaint/eddy/runs/<run>
 ```
 
 `--local-only` refuses OpenRouter, Descript, Auphonic, ElevenLabs, cloud render, and image/model uploads. Cloud quality mode is otherwise allowed by default when credentials are configured and cost-capped.
@@ -67,7 +68,7 @@ Eddy V2 has no publish, upload, scheduling, or hosted app code. It produces file
 
 ## Bake-Off
 
-See `docs/BAKEOFF.md` for the one-week comparison plan against current Eddy, V2 local-only, V2 cloud quality, and the `video-use` UX baseline.
+See `docs/BAKEOFF.md` for the one-week comparison plan against current Eddy, V2 local-only, V2 cloud quality, and the `video-use` UX baseline. `eddy bakeoff` now writes `bakeoff.json` and `bakeoff.md` into the V2 run folder. It compares against an explicit `--current-run` when provided, otherwise it searches read-only current-Eddy runs under `/Users/lennoxsaint/eddy/runs`; if no final current-Eddy media proof is found, the report records `current_output_proof_missing` instead of inventing a comparison.
 
 ## Motion Identities
 

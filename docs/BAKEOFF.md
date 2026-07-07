@@ -19,9 +19,10 @@ The bake-off exists to answer one question: can Eddy V2 beat the current Eddy pa
 
 1. Run the same hero fixture once per candidate path.
 2. Preserve the full run folder.
-3. Watch the first five minutes, one middle segment, and all Shorts.
-4. Score quality first, then time, then cost.
-5. Record all blockers in receipts and a human scorecard. Do not patch around a blocker without adding a regression test or a gate.
+3. Run `eddy bakeoff <hero-folder> --current-run <current-eddy-run>` when a known current Eddy run exists. If the current run is not supplied, Eddy searches `/Users/lennoxsaint/eddy/runs` read-only and writes `current_output_proof_missing` when it cannot prove a comparable final video.
+4. Watch the first five minutes, one middle segment, and all Shorts.
+5. Score quality first, then time, then cost.
+6. Record all blockers in receipts and a human scorecard. Do not patch around a blocker without adding a regression test or a gate.
 
 ## Scorecard
 
@@ -61,6 +62,7 @@ Live OpenRouter data checked on 2026-07-07 favored Claude/Opus/Sonnet and GPT-5.
 - A final artifact contains a known failed or partial render.
 - Fewer than three Shorts are produced without a `shorts_quality_shortfall` receipt.
 - A run claims "publishable" without Lennox review.
+- A bakeoff claims a current-Eddy comparison without a discovered or explicit current run containing final media proof.
 
 ## Win Condition
 

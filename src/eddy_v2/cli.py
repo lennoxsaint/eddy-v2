@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .bakeoff import build_bakeoff_report
 from .identities import list_identities
 from .pipeline import edit_folder
 from .receipts import Receipts
@@ -70,16 +71,25 @@ def bakeoff(args: argparse.Namespace) -> int:
         cloud_budget_usd=args.cloud_budget,
         target_duration_s=args.target_duration,
     )
-    bakeoff_path = result.run_dir / "bakeoff.md"
-    bakeoff_path.write_text(
-        "# Eddy V2 Bakeoff\n\n"
-        f"- hero_folder: {Path(args.folder).resolve()}\n"
-        f"- v2_status: {result.status}\n"
-        "- current_eddy_output: not compared by this command unless provided externally\n"
-        "- winner_bar: pending Lennox 8/10 review\n",
-        encoding="utf-8",
+    report = build_bakeoff_report(
+        folder=Path(args.folder),
+        v2_run_dir=result.run_dir,
+        current_run_dir=Path(args.current_run) if args.current_run else None,
+        receipts=Receipts(result.run_dir / "receipts.jsonl"),
     )
-    print(json.dumps({"run_dir": str(result.run_dir), "bakeoff": str(bakeoff_path), "status": result.status}, indent=2))
+    print(
+        json.dumps(
+            {
+                "run_dir": str(result.run_dir),
+                "bakeoff": str(result.run_dir / "bakeoff.md"),
+                "bakeoff_json": str(result.run_dir / "bakeoff.json"),
+                "status": result.status,
+                "current_output_proof": report["current_output_proof"],
+                "winner": report["winner"],
+            },
+            indent=2,
+        )
+    )
     return 0 if result.status == "complete" else 2
 
 
@@ -93,6 +103,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--local-only", action="store_true")
         p.add_argument("--cloud-budget", type=float, default=25.0)
         p.add_argument("--target-duration", type=float, default=None)
+        if name == "bakeoff":
+            p.add_argument("--current-run", default=None)
         p.set_defaults(func=func)
     for name, func in (("status", status), ("artifacts", artifacts), ("scorecard", scorecard)):
         p = sub.add_parser(name)
