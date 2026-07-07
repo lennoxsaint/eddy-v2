@@ -228,11 +228,14 @@ def _review_reels_proof(review_packet: Any) -> dict[str, Any]:
     reels = reels_raw if isinstance(reels_raw, dict) else {}
     long_reel = reels.get("long")
     shorts_reel = reels.get("shorts")
+    review_page = packet.get("review_page") if isinstance(packet, dict) else None
     return {
         "long": str(long_reel) if long_reel else None,
         "shorts": str(shorts_reel) if shorts_reel else None,
+        "review_page": str(review_page) if review_page else None,
         "long_exists": _bool_path_exists(long_reel),
         "shorts_exists": _bool_path_exists(shorts_reel),
+        "review_page_exists": _bool_path_exists(review_page),
     }
 
 
@@ -335,6 +338,8 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
         hero_missing.append("review_reel:long")
     if shorts_count > 0 and not review_reels["shorts_exists"]:
         hero_missing.append("review_reel:shorts")
+    if not review_reels["review_page_exists"]:
+        hero_missing.append("review_page")
     if source_hash_intact is not True:
         hero_missing.append("source_hash_intact")
     failed_gates = [name for name, status in gate_statuses.items() if status != "pass"]

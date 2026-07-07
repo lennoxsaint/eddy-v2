@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import html
 import json
+import os
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -138,6 +141,89 @@ def _criterion_rows() -> list[dict[str, Any]]:
     ]
 
 
+def _relpath(from_dir: Path, target: str | None) -> str | None:
+    if not target:
+        return None
+    return os.path.relpath(target, from_dir)
+
+
+def _review_command(run_dir: Path) -> str:
+    quoted = shlex.quote(str(run_dir))
+    return f"eddy review {quoted} --long-edit 8 --motion 8 --audio 8 --shorts 8"
+
+
+def _write_review_html(review_dir: Path, packet: dict[str, Any]) -> Path:
+    reels_raw = packet.get("review_reels")
+    reels = reels_raw if isinstance(reels_raw, dict) else {}
+    long_reel = _relpath(review_dir, reels.get("long"))
+    shorts_reel = _relpath(review_dir, reels.get("shorts"))
+    long_video = _relpath(review_dir, str(packet.get("long_video") or ""))
+    shorts = [_relpath(review_dir, str(path)) for path in packet.get("shorts", [])]
+    command = html.escape(str(packet.get("review_command") or ""))
+    audio_quality = html.escape(str((packet.get("audio_proof") or {}).get("quality_status", "missing")))
+    criteria = "\n".join(
+        f"<li>{html.escape(str(row['name']))}: needs {html.escape(str(row['required_score']))}/10+</li>"
+        for row in packet.get("criteria", [])
+    )
+    short_links = "\n".join(
+        f'<li><a href="{html.escape(str(path))}">{html.escape(Path(str(path)).name)}</a></li>'
+        for path in shorts
+        if path
+    )
+    long_video_block = (
+        f'<video controls preload="metadata" src="{html.escape(long_reel)}"></video>'
+        if long_reel
+        else '<p class="missing">Long review reel missing.</p>'
+    )
+    shorts_video_block = (
+        f'<video controls preload="metadata" src="{html.escape(shorts_reel)}"></video>'
+        if shorts_reel
+        else '<p class="missing">Shorts review reel missing.</p>'
+    )
+    page = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eddy V2 Review</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 32px; max-width: 1120px; color: #111827; background: #f8fafc; }}
+    h1, h2 {{ margin-bottom: 8px; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }}
+    section {{ background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }}
+    video {{ width: 100%; max-height: 520px; background: #020617; border-radius: 6px; }}
+    code {{ display: block; white-space: pre-wrap; background: #111827; color: #f9fafb; padding: 12px; border-radius: 6px; }}
+    .missing {{ color: #b91c1c; }}
+  </style>
+</head>
+<body>
+  <h1>Eddy V2 Review</h1>
+  <p>Status: {html.escape(str(packet.get("status", "unknown")))}. Audio: {audio_quality}.</p>
+  <div class="grid">
+    <section>
+      <h2>Long Reel</h2>
+      {long_video_block}
+      <p><a href="{html.escape(str(long_video))}">Open final long video</a></p>
+    </section>
+    <section>
+      <h2>Shorts Reel</h2>
+      {shorts_video_block}
+      <ul>{short_links}</ul>
+    </section>
+  </div>
+  <section>
+    <h2>Score Gate</h2>
+    <ul>{criteria}</ul>
+    <code>{command}</code>
+  </section>
+</body>
+</html>
+"""
+    path = review_dir / "review.html"
+    path.write_text(page, encoding="utf-8")
+    return path
+
+
 def build_review_packet(run_dir: Path, long_video: Path, shorts: list[Path], receipts: Receipts, *, audio_proof: Path | None = None) -> Path | None:
     review_dir = run_dir / "final" / "review"
     try:
@@ -165,6 +251,7 @@ def build_review_packet(run_dir: Path, long_video: Path, shorts: list[Path], rec
             "publishable_8_of_10": False,
             "long_video": str(long_video),
             "shorts": [str(path) for path in shorts],
+            "review_command": _review_command(run_dir),
             "review_reels": {
                 "long": str(long_reel) if long_reel else None,
                 "shorts": str(shorts_reel) if shorts_reel else None,
@@ -176,6 +263,9 @@ def build_review_packet(run_dir: Path, long_video: Path, shorts: list[Path], rec
             "criteria": _criterion_rows(),
         }
         review_dir.mkdir(parents=True, exist_ok=True)
+        packet["review_page"] = str(review_dir / "review.html")
+        review_page = _write_review_html(review_dir, packet)
+        packet["review_page"] = str(review_page)
         packet_path = review_dir / "review-packet.json"
         packet_path.write_text(json.dumps(packet, indent=2), encoding="utf-8")
         (review_dir / "README.md").write_text(_markdown(packet), encoding="utf-8")
@@ -187,6 +277,7 @@ def build_review_packet(run_dir: Path, long_video: Path, shorts: list[Path], rec
             short_sample_count=len(short_samples),
             long_review_reel=str(long_reel) if long_reel else None,
             shorts_review_reel=str(shorts_reel) if shorts_reel else None,
+            review_page=str(review_page),
         )
         return packet_path
     except Exception as exc:

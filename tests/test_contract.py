@@ -250,6 +250,7 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert scorecard["proof_layers"]["hero_run_proof"]["status"] == "pass"
     assert scorecard["proof_layers"]["hero_run_proof"]["review_reels"]["long_exists"] is True
     assert scorecard["proof_layers"]["hero_run_proof"]["review_reels"]["shorts_exists"] is True
+    assert scorecard["proof_layers"]["hero_run_proof"]["review_reels"]["review_page_exists"] is True
     assert scorecard["proof_layers"]["cloud_cost_proof"]["status"] == "blocked"
     assert scorecard["proof_layers"]["caption_proof"]["status"] == "warning"
     assert scorecard["proof_layers"]["caption_proof"]["sidecar_source"] == "editorial_callouts"
@@ -303,6 +304,11 @@ def test_review_packet_is_written_for_completed_run(tmp_path: Path, monkeypatch:
     assert Path(packet["review_reels"]["shorts"]).exists()
     assert packet["review_reels"]["long"].endswith("long-review-reel.mp4")
     assert packet["review_reels"]["shorts"].endswith("shorts-review-reel.mp4")
+    assert Path(packet["review_page"]).exists()
+    review_html = Path(packet["review_page"]).read_text(encoding="utf-8")
+    assert "long-review-reel.mp4" in review_html
+    assert "shorts-review-reel.mp4" in review_html
+    assert "eddy review " in review_html
     assert {criterion["name"] for criterion in packet["criteria"]} == {
         "long_edit_story",
         "motion_graphics",
@@ -315,6 +321,7 @@ def test_review_packet_is_written_for_completed_run(tmp_path: Path, monkeypatch:
     review_receipt = next(row for row in rows if row["event"] == "review_packet" and row["status"] == "pass")
     assert Path(review_receipt["long_review_reel"]).exists()
     assert Path(review_receipt["shorts_review_reel"]).exists()
+    assert Path(review_receipt["review_page"]).exists()
 
 
 def test_motion_project_has_dense_plan_and_visual_qa(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
