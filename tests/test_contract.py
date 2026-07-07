@@ -1078,6 +1078,7 @@ def test_review_command_can_mark_publishable_after_strong_studio_sound(tmp_path:
     assert reviewed["status"] == "pass"
     assert reviewed["publishable_8_of_10"] is True
     assert reviewed["blocking_reasons"] == []
+    assert reviewed["bakeoff_refresh"] == {"status": "skipped", "reason": "bakeoff_not_present"}
     assert scorecard["publishable_8_of_10"] is True
     assert scorecard["proof_layers"]["human_review_proof"]["status"] == "pass"
     assert scorecard["proof_layers"]["final_publishability"]["status"] == "publishable"
@@ -1473,12 +1474,17 @@ def test_bakeoff_selects_v2_after_publishable_review(tmp_path: Path, monkeypatch
         },
     )
     report = json.loads((result.run_dir / "bakeoff.json").read_text(encoding="utf-8"))
+    scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     ranking = [row for row in rows if row["event"] == "bakeoff_ranking"][-1]
     bakeoff_md = (result.run_dir / "bakeoff.md").read_text(encoding="utf-8")
 
     assert before_review["winner"] == "undecided_pending_lennox_8_of_10_review"
     assert reviewed["publishable_8_of_10"] is True
+    assert reviewed["bakeoff_refresh"]["status"] == "pass"
+    assert reviewed["bakeoff_refresh"]["winner"] == "eddy_v2"
+    assert reviewed["bakeoff_refresh"]["remaining_blockers"] == []
+    assert scorecard["proof_layers"]["final_publishability"]["status"] == "publishable"
     assert report["winner"] == "eddy_v2"
     assert report["current_output_proof"]["run_dir"] == str(current)
     assert report["comparison"]["human_quality_review"] == "pass"

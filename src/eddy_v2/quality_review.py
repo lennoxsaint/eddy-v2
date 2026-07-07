@@ -87,13 +87,13 @@ def _existing_current_run(run_dir: Path) -> Path | None:
     return Path(str(run)) if run else None
 
 
-def _refresh_existing_bakeoff(run_dir: Path, receipts: Receipts) -> None:
+def _refresh_existing_bakeoff(run_dir: Path, receipts: Receipts) -> dict[str, Any]:
     if not (run_dir / "bakeoff.json").exists():
-        return
+        return {"status": "skipped", "reason": "bakeoff_not_present"}
     folder = _footage_folder_for_run(run_dir)
     if folder is None:
         receipts.log("bakeoff_refresh", status="skipped", reason="run_dir_not_under_eddy_runs", run_dir=str(run_dir))
-        return
+        return {"status": "skipped", "reason": "run_dir_not_under_eddy_runs"}
     try:
         from .bakeoff import build_bakeoff_report
 
@@ -109,8 +109,15 @@ def _refresh_existing_bakeoff(run_dir: Path, receipts: Receipts) -> None:
             report=str(run_dir / "bakeoff.json"),
             winner=report.get("winner"),
         )
+        return {
+            "status": "pass",
+            "report": str(run_dir / "bakeoff.json"),
+            "winner": report.get("winner"),
+            "remaining_blockers": report.get("completion_audit", {}).get("remaining_blockers", []),
+        }
     except Exception as exc:
         receipts.log("bakeoff_refresh", status="failed", error=str(exc), run_dir=str(run_dir))
+        return {"status": "failed", "error": str(exc)}
 
 
 def apply_quality_review(
@@ -159,7 +166,7 @@ def apply_quality_review(
     scorecard["quality_review"] = review
     scorecard_path.write_text(json.dumps(scorecard, indent=2), encoding="utf-8")
     _update_scorecard_md(run_dir / "scorecard.md", review)
-    refresh_scorecard_proof_layers(run_dir)
+    refreshed_scorecard = refresh_scorecard_proof_layers(run_dir) or scorecard
 
     receipts = Receipts(run_dir / "receipts.jsonl")
     receipts.log(
@@ -170,5 +177,9 @@ def apply_quality_review(
         publishable_8_of_10=publishable,
         blocking_reasons=blocking_reasons,
     )
-    _refresh_existing_bakeoff(run_dir, receipts)
+    review["bakeoff_refresh"] = _refresh_existing_bakeoff(run_dir, receipts)
+    packet["quality_review"] = review
+    review_packet_path.write_text(json.dumps(packet, indent=2), encoding="utf-8")
+    refreshed_scorecard["quality_review"] = review
+    scorecard_path.write_text(json.dumps(refreshed_scorecard, indent=2), encoding="utf-8")
     return review
