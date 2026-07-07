@@ -293,6 +293,76 @@ def test_local_only_pipeline_skips_configured_model_key(tmp_path: Path, monkeypa
     assert any(row["event"] == "model_call" and row["status"] == "skipped" and row["reason"] == "local_only" for row in rows)
 
 
+def test_openrouter_editor_critic_loop_can_approve_intent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "EDDY_V2_FAKE_OPENROUTER_EDITOR_JSON",
+        json.dumps(
+            {
+                "target_duration_s": 2,
+                "identity": "broadcast-receipts",
+                "shorts_target": 1,
+                "hook": "The proof is in the receipts",
+                "title": "Receipt-Gated Editing",
+            }
+        ),
+    )
+    monkeypatch.setenv("EDDY_V2_FAKE_OPENROUTER_CRITIC_JSON", json.dumps({"approved": True, "issues": []}))
+    result = edit_folder(folder, target_duration_s=2)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    intent = json.loads((result.run_dir / "intent.json").read_text(encoding="utf-8"))
+    assert result.status == "complete"
+    assert intent["identity"] == "broadcast-receipts"
+    assert any(row["event"] == "model_call" and row["role"] == "editor" and row["status"] == "fake" for row in rows)
+    assert any(row["event"] == "model_call" and row["role"] == "critic" and row["status"] == "fake" for row in rows)
+    assert any(row["event"] == "model_critic" and row["status"] == "approved" for row in rows)
+    assert any(row["event"] == "model_loop" and row["status"] == "complete" for row in rows)
+
+
+def test_openrouter_critic_can_repair_invalid_editor_intent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    folder = make_layered_fixture(tmp_path / "footage", 3)
+    monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "EDDY_V2_FAKE_OPENROUTER_EDITOR_JSON",
+        json.dumps(
+            {
+                "target_duration_s": 9999,
+                "identity": "make-it-neon",
+                "shorts_target": "many",
+                "hook": "Generic AI video",
+                "title": "Video",
+            }
+        ),
+    )
+    monkeypatch.setenv(
+        "EDDY_V2_FAKE_OPENROUTER_CRITIC_JSON",
+        json.dumps(
+            {
+                "approved": False,
+                "issues": ["identity_not_frozen", "generic_hook"],
+                "repair": {
+                    "target_duration_s": 2,
+                    "identity": "code-cinema",
+                    "shorts_target": 1,
+                    "hook": "Custom model work needs proof, not vibes",
+                    "title": "Custom Models With Receipts",
+                },
+            }
+        ),
+    )
+    result = edit_folder(folder, target_duration_s=2)
+    rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    intent = json.loads((result.run_dir / "intent.json").read_text(encoding="utf-8"))
+    assert result.status == "complete"
+    assert intent["identity"] == "code-cinema"
+    assert intent["hook"] == "Custom model work needs proof, not vibes"
+    assert any(row["event"] == "model_critic" and row["status"] == "repaired" for row in rows)
+    assert any(row["event"] == "model_repair" and row["field"] == "intent" and row["selected"] == "critic_repair" for row in rows)
+
+
 def test_mcp_schemas_match_cli_surface():
     names = {tool["name"] for tool in TOOLS}
     assert names == {"eddy_v2_edit_start", "eddy_v2_artifacts"}

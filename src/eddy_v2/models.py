@@ -5,6 +5,7 @@ import os
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .commands import duration_s
 from .cost import CostTracker
@@ -12,6 +13,9 @@ from .identities import SLUGS
 from .policy import RunPolicy
 from .receipts import Receipts
 from .sources import Sources
+
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 @dataclass(frozen=True)
@@ -54,7 +58,22 @@ def _clamp_duration(sources: Sources, requested: float | int | str | None, fallb
     return max(1.0, min(requested_duration, source_duration))
 
 
-def _intent_from_model_payload(parsed: dict, sources: Sources, fallback: EditIntent, receipts: Receipts) -> EditIntent:
+def _dict_payload(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _json_from_text(text: str) -> dict[str, Any]:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = [line for line in stripped.splitlines() if not line.strip().startswith("```")]
+        stripped = "\n".join(lines).strip()
+    parsed = json.loads(stripped)
+    if not isinstance(parsed, dict):
+        raise ValueError("model_json_not_object")
+    return parsed
+
+
+def _intent_from_model_payload(parsed: dict[str, Any], sources: Sources, fallback: EditIntent, receipts: Receipts) -> EditIntent:
     identity = str(parsed.get("identity") or fallback.identity).strip().lower()
     if identity not in SLUGS:
         receipts.log(
@@ -78,6 +97,71 @@ def _intent_from_model_payload(parsed: dict, sources: Sources, fallback: EditInt
         hook=str(parsed.get("hook") or fallback.hook),
         title=str(parsed.get("title") or fallback.title),
     )
+
+
+def _call_openrouter_json(
+    *,
+    role: str,
+    model: str,
+    messages: list[dict[str, str]],
+    api_key: str,
+    receipts: Receipts,
+) -> tuple[dict[str, Any], str | None]:
+    fake_env = f"EDDY_V2_FAKE_OPENROUTER_{role.upper()}_JSON"
+    fake_payload = os.environ.get(fake_env)
+    if fake_payload:
+        receipts.log("model_call", provider="openrouter", role=role, status="fake", model=model)
+        return _json_from_text(fake_payload), f"fake-{role}"
+    payload = json.dumps({"model": model, "messages": messages}).encode("utf-8")
+    request = urllib.request.Request(
+        OPENROUTER_URL,
+        data=payload,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    content = data["choices"][0]["message"]["content"]
+    receipts.log("model_call", provider="openrouter", role=role, status="ok", model=model, response_id=data.get("id"))
+    return _json_from_text(content), data.get("id")
+
+
+def _critic_prompt(editor_payload: dict[str, Any], prompt: dict[str, Any], fallback: EditIntent) -> list[dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are Eddy V2's critic. Return only compact JSON with keys approved(boolean), "
+                "issues(array of strings), and optional repair(object). Enforce: identity must be one of the frozen identity packs; "
+                "target_duration_s must be feasible; shorts_target must be 0-5; hook/title must be specific and not generic. "
+                "If not approved, include a repair object with valid target_duration_s, identity, shorts_target, hook, title."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps({"input": prompt, "editor_payload": editor_payload, "fallback": fallback.as_dict()}),
+        },
+    ]
+
+
+def _apply_critic(
+    editor_payload: dict[str, Any],
+    critic_payload: dict[str, Any],
+    sources: Sources,
+    fallback: EditIntent,
+    receipts: Receipts,
+) -> EditIntent:
+    approved = bool(critic_payload.get("approved"))
+    issues = critic_payload.get("issues") if isinstance(critic_payload.get("issues"), list) else []
+    receipts.log("model_critic", provider="openrouter", status="approved" if approved else "repaired", issues=issues)
+    if approved:
+        return _intent_from_model_payload(editor_payload, sources, fallback, receipts)
+    repair = _dict_payload(critic_payload.get("repair"))
+    if repair:
+        receipts.log("model_repair", field="intent", selected="critic_repair", reason="critic_not_approved")
+        return _intent_from_model_payload(repair, sources, fallback, receipts)
+    receipts.log("model_repair", field="intent", selected="fallback", reason="critic_not_approved_without_repair")
+    return fallback
 
 
 def create_intent(
@@ -106,31 +190,45 @@ def create_intent(
         return fallback
 
     policy.require_cloud_allowed("openrouter", receipts)
-    payload = json.dumps(
-        {
-            "model": os.environ.get("EDDY_V2_OPENROUTER_MODEL", "anthropic/claude-sonnet-5"),
-            "messages": [
-                {"role": "system", "content": "Return only compact JSON with target_duration_s, identity, shorts_target, hook, title."},
+    editor_model = os.environ.get("EDDY_V2_OPENROUTER_EDITOR_MODEL") or os.environ.get("EDDY_V2_OPENROUTER_MODEL", "anthropic/claude-sonnet-5")
+    critic_model = os.environ.get("EDDY_V2_OPENROUTER_CRITIC_MODEL", editor_model)
+    try:
+        cost.charge("openrouter_editor", 0.25, provider="openrouter")
+        editor_payload, editor_response_id = _call_openrouter_json(
+            role="editor",
+            model=editor_model,
+            api_key=api_key,
+            receipts=receipts,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Eddy V2's editor. Return only compact JSON with target_duration_s, identity, "
+                        "shorts_target, hook, title. Prefer specific titles/hooks grounded in source metadata. "
+                        f"Identity must be one of: {', '.join(SLUGS)}."
+                    ),
+                },
                 {"role": "user", "content": json.dumps(prompt)},
             ],
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions",
-        data=payload,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        cost.charge("openrouter_editor", 0.25, provider="openrouter")
-        content = data["choices"][0]["message"]["content"]
-        parsed = json.loads(content)
-        intent = _intent_from_model_payload(parsed, sources, fallback, receipts)
-        receipts.log("model_call", provider="openrouter", status="ok", response_id=data.get("id"))
+        )
+        cost.charge("openrouter_critic", 0.10, provider="openrouter")
+        critic_payload, critic_response_id = _call_openrouter_json(
+            role="critic",
+            model=critic_model,
+            api_key=api_key,
+            receipts=receipts,
+            messages=_critic_prompt(editor_payload, prompt, fallback),
+        )
+        receipts.log(
+            "model_loop",
+            provider="openrouter",
+            status="complete",
+            editor_response_id=editor_response_id,
+            critic_response_id=critic_response_id,
+        )
+        intent = _apply_critic(editor_payload, critic_payload, sources, fallback, receipts)
     except Exception as exc:
-        receipts.log("model_call", provider="openrouter", status="failed", error=str(exc))
+        receipts.log("model_loop", provider="openrouter", status="failed", error=str(exc))
         intent = fallback
     (run_dir / "intent.json").write_text(json.dumps(intent.as_dict(), indent=2), encoding="utf-8")
     return intent
