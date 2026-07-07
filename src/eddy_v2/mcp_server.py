@@ -124,7 +124,7 @@ def _text_content(text: str) -> dict[str, Any]:
 
 
 def _doctor_payload() -> dict[str, Any]:
-    return doctor_payload()
+    return doctor_payload(check_onepassword=True)
 
 
 def _status_payload(run_dir: Path) -> dict[str, Any]:

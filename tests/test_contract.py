@@ -1083,6 +1083,8 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
     }
     assert doctor["ok"] is True
     assert doctor["missing_required_runtime_tools"] == []
+    assert doctor["credential_helpers"]["onepassword_cli"]["status"] in {"missing", "not_signed_in", "signed_in", "timeout", "unavailable"}
+    assert doctor["credential_helpers"]["onepassword_cli"]["check"] == "op whoami"
     assert "code-cinema" in doctor["identities"]
     assert status["status"] == "blocked"
     assert "final/video.mp4" in artifacts["files"]
