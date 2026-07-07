@@ -229,6 +229,7 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
     scorecard_md = (result.run_dir / "scorecard.md").read_text(encoding="utf-8")
+    caption_provenance = json.loads((result.run_dir / "final" / "caption-provenance.json").read_text(encoding="utf-8"))
     gates = {row["name"] for row in rows if row["event"] == "gate" and row["status"] == "pass"}
     assert result.status == "blocked"
     assert {
@@ -248,6 +249,10 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert any(row["event"] == "motion_composite" and row["surface"] == "shorts" for row in rows)
     assert scorecard["proof_layers"]["hero_run_proof"]["status"] == "pass"
     assert scorecard["proof_layers"]["cloud_cost_proof"]["status"] == "blocked"
+    assert scorecard["proof_layers"]["caption_proof"]["status"] == "warning"
+    assert scorecard["proof_layers"]["caption_proof"]["sidecar_source"] == "editorial_callouts"
+    assert scorecard["proof_layers"]["caption_proof"]["speech_accurate_subtitles"] is False
+    assert caption_provenance["warning"] == "speech_accurate_subtitles_not_proven"
     assert "pending_lennox_8_of_10_review" in scorecard["proof_layers"]["final_publishability"]["blockers"]
     assert scorecard["proof_layers"]["cloud_cost_proof"]["audio_retry_command"].startswith("eddy audio-proof ")
     assert {
@@ -259,6 +264,7 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     actions = {action["action"] for action in scorecard["proof_layers"]["final_publishability"]["unblock_actions"]}
     assert {"configure_one_audio_provider", "prove_descript_studio_sound_parity", "record_lennox_quality_review"} <= actions
     assert "<!-- proof-layers:start -->" in scorecard_md
+    assert "- caption_proof: warning (editorial_callouts)" in scorecard_md
     assert "- audio_retry_command: eddy audio-proof " in scorecard_md
     assert "- review_command: eddy review " in scorecard_md
 
@@ -374,12 +380,16 @@ def test_timed_caption_artifacts_are_written(tmp_path: Path, monkeypatch: pytest
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     result = edit_folder(folder, local_only=True, target_duration_s=12)
     captions = json.loads((result.run_dir / "final" / "captions.json").read_text(encoding="utf-8"))
+    provenance = json.loads((result.run_dir / "final" / "caption-provenance.json").read_text(encoding="utf-8"))
     srt = (result.run_dir / "final" / "subtitles.srt").read_text(encoding="utf-8")
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     assert result.status == "blocked"
     assert len(captions["cues"]) >= 2
+    assert provenance["sidecar_source"] == "editorial_callouts"
+    assert provenance["speech_accurate_subtitles"] is False
     assert "\n2\n" in srt
     assert any(row["event"] == "caption_plan" and row["status"] == "pass" and row.get("cue_count", 0) >= 2 for row in rows)
+    assert any(row["event"] == "caption_provenance" and row["warning"] == "speech_accurate_subtitles_not_proven" for row in rows)
 
 
 def test_short_caption_textfiles_are_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -431,10 +441,14 @@ def test_transcript_sidecar_drives_semantic_chapters_and_short_starts(tmp_path: 
     plan = json.loads((result.run_dir / "edit-plan.json").read_text(encoding="utf-8"))
     launch_kit = json.loads((result.run_dir / "final" / "launch-kit" / "launch-kit.json").read_text(encoding="utf-8"))
     transcript_cues = json.loads((result.run_dir / "transcript-cues.json").read_text(encoding="utf-8"))
+    provenance = json.loads((result.run_dir / "final" / "caption-provenance.json").read_text(encoding="utf-8"))
 
     assert result.status == "blocked"
     assert transcript_cues["source"].endswith("transcript.vtt")
     assert plan["transcript_cue_count"] == 3
+    assert provenance["transcript_available"] is True
+    assert provenance["transcript_cue_count"] == 3
+    assert provenance["speech_accurate_subtitles"] is False
     assert [chapter["source"] for chapter in launch_kit["chapters"]] == ["transcript", "transcript", "transcript"]
     assert launch_kit["chapters"][0]["title"].startswith("First semantic hook")
     assert plan["short_starts_s"] == [0.0, 17.0, 34.0]
@@ -907,6 +921,8 @@ def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, mo
     assert report["completion_audit"]["repo_setup_proof"]["status"] == "requires_external_verification"
     assert report["completion_audit"]["hero_run_proof"]["status"] == "pass"
     assert report["completion_audit"]["cloud_cost_proof"]["status"] == "blocked"
+    assert report["completion_audit"]["caption_proof"]["status"] == "warning"
+    assert report["completion_audit"]["caption_proof"]["warning"] == "speech_accurate_subtitles_not_proven"
     assert "pending_lennox_8_of_10_review" in report["completion_audit"]["remaining_blockers"]
     assert any(action["action"] == "record_lennox_quality_review" for action in report["completion_audit"]["unblock_actions"])
 

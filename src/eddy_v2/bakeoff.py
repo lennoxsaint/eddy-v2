@@ -261,6 +261,7 @@ def _completion_audit(v2: dict[str, Any]) -> dict[str, Any]:
         "shorts_proof": proof_layers.get("shorts_proof", {"status": "missing"}),
         "cloud_cost_proof": proof_layers.get("cloud_cost_proof", {"status": "missing"}),
         "human_review_proof": proof_layers.get("human_review_proof", {"status": "missing"}),
+        "caption_proof": proof_layers.get("caption_proof", {"status": "missing"}),
         "remaining_blockers": remaining,
         "unblock_actions": actions,
     }
@@ -301,6 +302,7 @@ def _markdown(report: dict[str, Any]) -> str:
     shorts = completion["shorts_proof"]
     cloud = completion["cloud_cost_proof"]
     human = completion["human_review_proof"]
+    caption = completion["caption_proof"]
     lines = [
         "# Eddy V2 Bakeoff",
         "",
@@ -364,6 +366,7 @@ def _markdown(report: dict[str, Any]) -> str:
             f"- cloud_cost_proof: {cloud.get('status', 'missing')}",
             f"- audio_quality: {cloud.get('audio_quality', 'missing')}",
             f"- human_review_proof: {human.get('status', 'missing')}",
+            f"- caption_proof: {caption.get('status', 'missing')} ({caption.get('sidecar_source', 'unknown')})",
             f"- remaining_blockers: {', '.join(completion['remaining_blockers']) if completion['remaining_blockers'] else 'none'}",
         ]
     )

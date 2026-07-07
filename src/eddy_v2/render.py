@@ -70,7 +70,13 @@ def render_long(
     validate_motion_artifact(motion_project, motion_output, receipts, portrait=False)
 
     output = final_dir / "video.mp4"
-    long_cues = write_caption_artifacts(final_dir, intent, target, receipts)
+    long_cues = write_caption_artifacts(
+        final_dir,
+        intent,
+        target,
+        receipts,
+        transcript_cue_count=plan.transcript_cue_count if plan else 0,
+    )
     long_caption_filters = cue_drawtext_filters(
         run_dir,
         "long-callout",

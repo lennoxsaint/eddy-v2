@@ -64,6 +64,8 @@ Host agents can bypass OpenRouter by supplying a reviewed intent through `--inte
 
 If the footage folder contains `transcript.vtt`, `transcript.srt`, `transcript.txt`, `captions.vtt`, or `captions.srt`, Eddy parses it into `transcript-cues.json`, derives semantic launch-kit chapters, and prefers transcript-backed Shorts anchors. Source media still stays read-only. If no transcript sidecar exists, Eddy records `transcript_source_missing`, uses audio-density planning, and marks launch-kit chapters as fallback.
 
+Long-form `captions.json`, `subtitles.srt`, and `subtitles.vtt` are timed editorial callouts unless `final/caption-provenance.json` proves otherwise. V2 writes that provenance file on every new render and marks `speech_accurate_subtitles_not_proven` when the sidecars are useful motion/caption overlays rather than verbatim speech subtitles. This is a quality warning for review and bakeoff scoring, not a source-safety failure.
+
 ## Audio Quality
 
 When `DESCRIPT_API_KEY` is configured, Eddy tries Descript Studio Sound first using only the extracted audio WAV. It requests a direct upload URL, uploads audio bytes only, prompts Underlord for Studio Sound without timing/content edits, publishes an audio export, downloads it, and marks Strong Studio Sound only if duration parity passes. Tokens and signed URLs are never written to receipts.
@@ -88,7 +90,7 @@ Completed runs also write `final/review/review-packet.json` and `final/review/RE
 Use `eddy review <run> --long-edit <score> --motion <score> --audio <score> --shorts <score>` to record that taste review back into the run. The command updates the review packet and scorecard, but it keeps `publishable_8_of_10` false when machine blockers or audio quality blockers are still present.
 
 `scorecard.json` includes `proof_layers` so operators can inspect the run without collapsing proof states:
-`hero_run_proof`, `shorts_proof`, `cloud_cost_proof`, `human_review_proof`, and `final_publishability`.
+`hero_run_proof`, `shorts_proof`, `cloud_cost_proof`, `human_review_proof`, `caption_proof`, and `final_publishability`.
 The same section is refreshed after `eddy edit`, `eddy audio-proof`, and `eddy review`. When blocked,
 it includes secret-safe unblock actions: provider environment-variable options, the exact
 `eddy audio-proof` retry command, and the `eddy review` command template. It never records token values.

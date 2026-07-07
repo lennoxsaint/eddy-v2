@@ -23,7 +23,7 @@ The bake-off exists to answer one question: can Eddy V2 beat the current Eddy pa
 4. Watch the first five minutes, one middle segment, and all Shorts.
 5. Score quality first, then time, then cost.
 6. Record all blockers in receipts and a human scorecard. Do not patch around a blocker without adding a regression test or a gate.
-7. Read `completion_audit` in `bakeoff.json` before declaring a winner. The run folder can prove hero media, Shorts yield, cloud/cost, and human-review state, but repo setup and test proof still require the listed external commands or CI.
+7. Read `completion_audit` in `bakeoff.json` before declaring a winner. The run folder can prove hero media, Shorts yield, caption provenance, cloud/cost, and human-review state, but repo setup and test proof still require the listed external commands or CI.
 8. If `remaining_blockers` is non-empty, follow `unblock_actions` instead of guessing. These actions are secret-safe: they name environment variables and commands, not credential values.
 
 ## Scorecard
@@ -66,6 +66,7 @@ Live OpenRouter data checked on 2026-07-07 favored Claude/Opus/Sonnet and GPT-5.
 - A run claims "publishable" without Lennox review.
 - `completion_audit.remaining_blockers` is non-empty.
 - `completion_audit.unblock_actions` is missing while blockers remain.
+- `completion_audit.caption_proof` is missing, or caption sidecars are treated as speech-accurate without provenance.
 - A bakeoff claims a current-Eddy comparison without a discovered or explicit current run containing final media proof.
 
 ## Win Condition

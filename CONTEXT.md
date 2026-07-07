@@ -48,6 +48,10 @@ _Avoid_: Hidden transcription job, source edit, unreceipted metadata
 A launch-kit chapter derived from transcript language and backed by a `transcript` receipt, with a fallback marker when no transcript sidecar exists.
 _Avoid_: Generic chapter, fake understanding, unproven editorial beat
 
+**Caption Provenance**:
+The proof file that says whether timed caption sidecars are speech-accurate subtitles or editorial callouts used for motion overlays.
+_Avoid_: Assuming `.srt` means verbatim, hidden transcription claim, unlabelled captions
+
 ## Relationships
 
 - A **Proof-Gated One-Command** run may use the **Cloud Quality Profile** unless `--local-only` is set.
@@ -55,6 +59,7 @@ _Avoid_: Generic chapter, fake understanding, unproven editorial beat
 - A **Quarantined Partial** may be cited in receipts, but it must not appear in `final/`.
 - The **Bakeoff Hero Video** is the acceptance target after the full V2 feature floor exists.
 - A **Transcript Sidecar** can produce **Semantic Chapter** entries, but the run remains complete without one only when the fallback is receipted.
+- **Caption Provenance** may warn that sidecars are editorial callouts even when a **Transcript Sidecar** exists, because transcript-backed planning is separate from speech-accurate subtitle generation.
 - An **8/10 Quality Review** can only mark a run publishable when every score is 8+ and no machine or audio quality blockers remain.
 - An **Audio Proof Retry** may remove the Studio Sound blocker for an existing run, but only after the remuxed long video re-passes media integrity.
 - **Proof Layers** are refreshed after edits, audio retries, and human reviews so a run can show green media proof while final publishability stays blocked.
@@ -72,3 +77,4 @@ _Avoid_: Generic chapter, fake understanding, unproven editorial beat
 
 - "Perfectly edited" means **Proof-Gated One-Command**, not a universal subjective guarantee.
 - "Cloud first" means the **Cloud Quality Profile**, not uncapped or silent uploads.
+- "Subtitles" means timed sidecars; use **Caption Provenance** before treating them as speech-accurate.

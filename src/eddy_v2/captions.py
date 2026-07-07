@@ -66,7 +66,42 @@ def build_short_cues(intent: EditIntent, duration: float = 15.0) -> list[Caption
     return cues
 
 
-def write_caption_artifacts(final_dir: Path, intent: EditIntent, duration: float, receipts: Receipts) -> list[CaptionCue]:
+def caption_provenance_payload(cues: list[CaptionCue], *, transcript_cue_count: int = 0) -> dict:
+    return {
+        "status": "warning",
+        "sidecar_source": "editorial_callouts",
+        "caption_kinds": sorted({cue.kind for cue in cues}),
+        "cue_count": len(cues),
+        "transcript_available": transcript_cue_count > 0,
+        "transcript_cue_count": transcript_cue_count,
+        "speech_accurate_subtitles": False,
+        "warning": "speech_accurate_subtitles_not_proven",
+    }
+
+
+def write_caption_provenance(
+    final_dir: Path,
+    cues: list[CaptionCue],
+    receipts: Receipts | None = None,
+    *,
+    transcript_cue_count: int = 0,
+) -> dict:
+    provenance = caption_provenance_payload(cues, transcript_cue_count=transcript_cue_count)
+    provenance_path = final_dir / "caption-provenance.json"
+    provenance_path.write_text(json.dumps(provenance, indent=2), encoding="utf-8")
+    if receipts:
+        receipts.log("caption_provenance", output=str(provenance_path), **provenance)
+    return provenance
+
+
+def write_caption_artifacts(
+    final_dir: Path,
+    intent: EditIntent,
+    duration: float,
+    receipts: Receipts,
+    *,
+    transcript_cue_count: int = 0,
+) -> list[CaptionCue]:
     cues = build_long_cues(intent, duration)
     payload = {"cues": [cue.as_dict() for cue in cues]}
     (final_dir / "captions.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -78,7 +113,15 @@ def write_caption_artifacts(final_dir: Path, intent: EditIntent, duration: float
         vtt_blocks.append(f"{_time_vtt(cue.start_s)} --> {_time_vtt(cue.end_s)}\n{wrapped}\n")
     (final_dir / "subtitles.srt").write_text("\n".join(srt_blocks), encoding="utf-8")
     (final_dir / "subtitles.vtt").write_text("\n".join(vtt_blocks), encoding="utf-8")
-    receipts.log("caption_plan", status="pass", cue_count=len(cues), output=str(final_dir / "captions.json"))
+    provenance = write_caption_provenance(final_dir, cues, receipts, transcript_cue_count=transcript_cue_count)
+    receipts.log(
+        "caption_plan",
+        status="pass",
+        cue_count=len(cues),
+        output=str(final_dir / "captions.json"),
+        sidecar_source=provenance["sidecar_source"],
+        speech_accurate_subtitles=provenance["speech_accurate_subtitles"],
+    )
     return cues
 
 

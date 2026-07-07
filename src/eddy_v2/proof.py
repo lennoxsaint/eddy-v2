@@ -147,6 +147,56 @@ def _audio_profile(audio: dict[str, Any]) -> dict[str, Any]:
     return audio_raw if isinstance(audio_raw, dict) else cloud_audio_profile()
 
 
+def _int_value(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _caption_proof(run_dir: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    final_dir = run_dir / "final"
+    provenance_path = final_dir / "caption-provenance.json"
+    provenance = read_json_object(provenance_path)
+    provenance_artifact_exists = provenance is not None
+    if provenance is None:
+        provenance = _latest(rows, "caption_provenance")
+    sidecars = [final_dir / "captions.json", final_dir / "subtitles.srt", final_dir / "subtitles.vtt"]
+    sidecars_exist = all(path.exists() and path.stat().st_size > 0 for path in sidecars)
+    if not provenance:
+        if sidecars_exist:
+            provenance = {
+                "status": "warning",
+                "sidecar_source": "legacy_sidecars_without_provenance",
+                "speech_accurate_subtitles": False,
+                "transcript_available": (run_dir / "transcript-cues.json").exists(),
+                "transcript_cue_count": 0,
+                "warning": "speech_accurate_subtitles_not_proven",
+            }
+        else:
+            provenance = {
+                "status": "missing",
+                "sidecar_source": "missing",
+                "speech_accurate_subtitles": False,
+                "transcript_available": False,
+                "transcript_cue_count": 0,
+                "warning": "caption_sidecars_missing",
+            }
+    speech_accurate = bool(provenance.get("speech_accurate_subtitles"))
+    status = str(provenance.get("status") or ("pass" if speech_accurate else "warning"))
+    return {
+        "status": status,
+        "caption_sidecars_exist": sidecars_exist,
+        "provenance_artifact_exists": provenance_artifact_exists,
+        "provenance_artifact": str(provenance_path),
+        "sidecar_source": str(provenance.get("sidecar_source") or "unknown"),
+        "speech_accurate_subtitles": speech_accurate,
+        "transcript_available": bool(provenance.get("transcript_available")),
+        "transcript_cue_count": _int_value(provenance.get("transcript_cue_count")),
+        "warning": provenance.get("warning"),
+    }
+
+
 def _review_command(run_dir: Path) -> str:
     quoted = shlex.quote(str(run_dir))
     return f"eddy review {quoted} --long-edit 8 --motion 8 --audio 8 --shorts 8"
@@ -254,6 +304,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
     audio_profile = _audio_profile(audio)
     audio_retry_command = _audio_retry_command(run_dir, cap or 25.0)
     review_command = _review_command(run_dir)
+    caption = _caption_proof(run_dir, rows)
     unblock_actions = _unblock_actions(
         blockers=final_blockers,
         audio_profile=audio_profile,
@@ -301,6 +352,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
             "blockers": human_blockers,
             "review_command_template": review_command,
         },
+        "caption_proof": caption,
         "final_publishability": {
             "status": final_status,
             "blockers": final_blockers,
@@ -314,6 +366,7 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
     shorts = proof_layers["shorts_proof"]
     cloud = proof_layers["cloud_cost_proof"]
     human = proof_layers["human_review_proof"]
+    caption = proof_layers.get("caption_proof", {"status": "missing"})
     final = proof_layers["final_publishability"]
     audio_retry_command = cloud.get("audio_retry_command") or "none"
     review_command = human.get("review_command_template") or "none"
@@ -327,6 +380,7 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
             f"- cloud_cost_proof: {cloud['status']} (${cloud['spent_usd']:.4f} / ${cloud['cap_usd']:.2f})",
             f"- audio_quality: {cloud['audio_quality']}",
             f"- human_review_proof: {human['status']}",
+            f"- caption_proof: {caption.get('status', 'missing')} ({caption.get('sidecar_source', 'unknown')})",
             f"- final_publishability: {final['status']}",
             f"- final_blockers: {', '.join(final['blockers']) if final['blockers'] else 'none'}",
             f"- audio_retry_command: {audio_retry_command}",
