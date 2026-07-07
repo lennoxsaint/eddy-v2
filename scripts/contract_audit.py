@@ -65,6 +65,18 @@ REQUIRED_CONTEXT_TERMS = [
     "Bakeoff Hero Video",
 ]
 
+REQUIRED_SKILL_TERMS = [
+    "Codex",
+    "Claude",
+    "MCP",
+    "eddy_v2_edit_start",
+    "eddy edit <folder>",
+    "eddy audio-proof <run>",
+    "eddy review <run>",
+    "--local-only",
+    "No platform publish, full-video upload, or scheduling actions exist",
+]
+
 REQUIRED_PACKAGE_DATA = {
     "identities_data/*/*",
     "identities_data/*/assets/*",
@@ -229,6 +241,7 @@ def main() -> int:
         path.name for path in (SRC / "eddy_v2" / "identities_data" / "threadify-fc" / "assets").glob("*.png")
     }
     context = (ROOT / "CONTEXT.md").read_text(encoding="utf-8")
+    skill = (ROOT / "skills" / "eddy-v2" / "SKILL.md").read_text(encoding="utf-8")
     forbidden_publication = _scan_publication_integrations()
 
     checks = {
@@ -241,6 +254,7 @@ def main() -> int:
         "mcp_initialize_lifecycle": _mcp_initialize_ok(),
         "frozen_identity_pack": identity_slugs == REQUIRED_IDENTITIES,
         "required_docs_present": all(path.exists() for path in REQUIRED_DOCS),
+        "codex_claude_skill_surface": all(term in skill for term in REQUIRED_SKILL_TERMS),
         "node_hyperframes_renderer_boundary": (ROOT / "renderer" / "hyperframes-runner.mjs").exists()
         and (ROOT / "package.json").exists()
         and REQUIRED_NPM_SCRIPTS <= npm_scripts

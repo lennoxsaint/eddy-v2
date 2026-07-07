@@ -5,7 +5,8 @@ description: Run Eddy V2 proof-gated YouTube edits from raw footage folders. Use
 
 # Eddy V2 Skill
 
-Use MCP tools first when available. Fall back to the CLI.
+This is the shared Codex and Claude skill for Eddy V2. Use MCP tools first when
+available. Fall back to the CLI.
 
 ## Default workflow
 
@@ -47,6 +48,8 @@ branches and keep the existing audio blockers.
 ## Hard boundaries
 
 - Never edit, move, delete, or overwrite raw source files.
-- No publish, upload, or scheduling actions exist in Eddy V2.
+- No platform publish, full-video upload, or scheduling actions exist in Eddy V2.
+- The only permitted egress is receipted, cost-capped model/audio quality work when cloud mode is
+  allowed and credentials are configured.
 - `--local-only` must be used whenever the user forbids cloud/model/audio/image egress.
 - Do not call a run publishable until Lennox scores long edit, motion, audio, and Shorts at 8/10+.
