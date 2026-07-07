@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .commands import ffprobe_json
+from .commands import ffprobe_json, run_command
 from .receipts import Receipts
 
 
@@ -83,7 +83,15 @@ def validate_caption_sidecars(final_dir: Path, receipts: Receipts, *, title: str
 
 def validate_motion_artifact(project: Path, output: Path, receipts: Receipts, *, portrait: bool) -> None:
     gate = "motion_artifact"
-    required_files = ["frame.md", "identity.css", "blocks.json", "index.html"]
+    required_files = [
+        "frame.md",
+        "identity.css",
+        "blocks.json",
+        "index.html",
+        "motion-plan.json",
+        "motion-lint.json",
+        "motion-inspect.json",
+    ]
     missing = [name for name in required_files if not (project / name).exists()]
     if missing:
         receipts.log("gate", name=gate, status="failed", reason="missing_motion_project_files", missing=missing, project=str(project))
@@ -98,6 +106,44 @@ def validate_motion_artifact(project: Path, output: Path, receipts: Receipts, *,
         receipts.log("gate", name=gate, status="failed", reason="unexpected_motion_geometry", output=str(output), expected=expected)
         raise RuntimeError("motion_artifact_corrupt")
     receipts.log("gate", name=gate, status="pass", output=str(output), project=str(project), width=stream.get("width"), height=stream.get("height"))
+    validate_motion_visual_qa(output, project, receipts)
+
+
+def validate_motion_visual_qa(output: Path, project: Path, receipts: Receipts) -> None:
+    proc = run_command(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-i",
+            str(output),
+            "-vf",
+            "fps=1,scale=16:16,format=gray",
+            "-f",
+            "framemd5",
+            "-",
+        ],
+        receipts,
+        event="ffmpeg",
+        timeout_s=300,
+        check=False,
+    )
+    hashes = []
+    for line in proc.stdout.splitlines():
+        if line.startswith("#") or "," not in line:
+            continue
+        hashes.append(line.rsplit(",", 1)[-1].strip())
+    unique_hashes = sorted(set(hashes))
+    report = {
+        "output": str(output),
+        "sampled_frames": len(hashes),
+        "unique_frame_hashes": len(unique_hashes),
+        "inspect_file": str(project / "motion-inspect.json"),
+    }
+    (project / "motion-visual-qa.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    if proc.returncode != 0 or len(hashes) < 2 or len(unique_hashes) < 2:
+        receipts.log("gate", name="motion_visual_qa", status="failed", **report)
+        raise RuntimeError("motion_visual_qa_failed")
+    receipts.log("gate", name="motion_visual_qa", status="pass", **report)
 
 
 def validate_short_video(run_dir: Path, output: Path, receipts: Receipts, *, index: int) -> bool:

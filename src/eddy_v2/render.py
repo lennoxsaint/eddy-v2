@@ -65,7 +65,7 @@ def render_long(
     start = plan.long_segment.start_s if plan else 0.0
     target = max(1.0, min(plan.long_segment.duration_s if plan else intent.target_duration_s, source_duration - start))
     audio = polish_audio(sources, run_dir, receipts, policy, cost, start_s=start, duration_s=target)
-    motion_project = create_motion_project(run_dir, intent.identity, intent.hook, portrait=False)
+    motion_project = create_motion_project(run_dir, intent.identity, intent.hook, portrait=False, duration_s=target, receipts=receipts)
     motion_output = run_hyperframes(motion_project, receipts)
     validate_motion_artifact(motion_project, motion_output, receipts, portrait=False)
 
@@ -87,7 +87,9 @@ def render_long(
             "[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,"
             "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[base];"
             "[0:v]scale=420:-1[cam];"
-            f"[base][cam]overlay=40:40,{long_caption_filters}[v]"
+            "[base][cam]overlay=40:40[pip];"
+            "[3:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080[ov];"
+            f"[pip][ov]blend=all_mode=screen:shortest=1,{long_caption_filters}[v]"
         )
         args = [
             "ffmpeg",
@@ -108,6 +110,12 @@ def render_long(
             f"{target:.3f}",
             "-i",
             str(audio),
+            "-stream_loop",
+            "-1",
+            "-t",
+            f"{target:.3f}",
+            "-i",
+            str(motion_output),
             "-filter_complex",
             filter_complex,
             "-map",
@@ -141,10 +149,21 @@ def render_long(
             f"{target:.3f}",
             "-i",
             str(audio),
-            "-vf",
-            f"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,{long_caption_filters}",
+            "-stream_loop",
+            "-1",
+            "-t",
+            f"{target:.3f}",
+            "-i",
+            str(motion_output),
+            "-filter_complex",
+            (
+                "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,"
+                "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[base];"
+                "[2:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080[ov];"
+                f"[base][ov]blend=all_mode=screen:shortest=1,{long_caption_filters}[v]"
+            ),
             "-map",
-            "0:v",
+            "[v]",
             "-map",
             "1:a",
             "-r",
@@ -160,6 +179,7 @@ def render_long(
             "-shortest",
             str(output),
         ]
+    receipts.log("motion_composite", status="pass", surface="long", mode="screen_blend", motion=str(motion_output))
     run_command(args, receipts, event="ffmpeg", timeout_s=7200)
     probe = ffprobe_json(output)
     (final_dir / "video.ffprobe.json").write_text(json.dumps(probe, indent=2), encoding="utf-8")
@@ -171,7 +191,7 @@ def render_long(
 def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts: Receipts, *, plan: EditPlan | None = None) -> list[Path]:
     shorts_dir = run_dir / "final" / "shorts"
     shorts_dir.mkdir(parents=True, exist_ok=True)
-    motion_project = create_motion_project(run_dir, intent.identity, intent.hook, portrait=True)
+    motion_project = create_motion_project(run_dir, intent.identity, intent.hook, portrait=True, duration_s=15.0, receipts=receipts)
     motion_output = run_hyperframes(motion_project, receipts, portrait=True)
     validate_motion_artifact(motion_project, motion_output, receipts, portrait=True)
     source_duration = duration_s(sources.camera)
@@ -199,7 +219,9 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
             filter_complex = (
                 "[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[cam];"
                 "[1:v]scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2:black[screen];"
-                f"[cam][screen]vstack=inputs=2,{short_caption_filters}[v]"
+                "[cam][screen]vstack=inputs=2[stack];"
+                "[2:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[ov];"
+                f"[stack][ov]blend=all_mode=screen:shortest=1,{short_caption_filters}[v]"
             )
             args = [
                 "ffmpeg",
@@ -216,6 +238,8 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 "15",
                 "-i",
                 str(sources.screen),
+                "-i",
+                str(motion_output),
                 "-filter_complex",
                 filter_complex,
                 "-map",
@@ -245,8 +269,18 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 "15",
                 "-i",
                 str(sources.camera),
-                "-vf",
-                f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,{short_caption_filters}",
+                "-i",
+                str(motion_output),
+                "-filter_complex",
+                (
+                    "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[base];"
+                    "[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[ov];"
+                    f"[base][ov]blend=all_mode=screen:shortest=1,{short_caption_filters}[v]"
+                ),
+                "-map",
+                "[v]",
+                "-map",
+                "0:a?",
                 "-r",
                 "30",
                 "-c:v",
@@ -261,6 +295,7 @@ def render_shorts(sources: Sources, run_dir: Path, intent: EditIntent, receipts:
                 str(out),
             ]
         try:
+            receipts.log("motion_composite", status="pass", surface="shorts", index=index, mode="screen_blend", motion=str(motion_output))
             run_command(args, receipts, event="ffmpeg", timeout_s=1800)
             if validate_short_video(run_dir, out, receipts, index=index):
                 receipts.log("short_rendered", index=index, status="pass", output=str(out))
