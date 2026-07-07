@@ -104,14 +104,17 @@ def select_short_starts(intervals: list[tuple[float, float]], source_duration: f
     scored.sort(key=lambda item: (-item[0], item[1]))
 
     distribution_gap = min(max(short_duration_s, source_duration / max(target_count * 6, 1)), short_duration_s * 24)
-    for gap in (distribution_gap, short_duration_s, short_duration_s / 2, 0.0):
+    best: list[float] = []
+    for gap in (distribution_gap, short_duration_s):
         starts: list[float] = []
         for _, start in scored:
             if all(abs(start - existing) >= gap for existing in starts):
                 starts.append(start)
             if len(starts) == target_count:
                 return [round(value, 3) for value in sorted(starts)]
-    return []
+        if len(starts) > len(best):
+            best = starts
+    return [round(value, 3) for value in sorted(best)]
 
 
 def select_semantic_short_starts(

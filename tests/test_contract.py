@@ -20,7 +20,7 @@ from eddy_v2.plan import EditPlan, Segment, create_edit_plan, select_semantic_sh
 from eddy_v2.pipeline import edit_folder
 from eddy_v2.policy import CLOUD_SURFACES, RunPolicy
 from eddy_v2.proof import audio_gate_blockers
-from eddy_v2.qa import validate_motion_artifact, validate_short_video
+from eddy_v2.qa import validate_cut_integrity, validate_motion_artifact, validate_short_video
 from eddy_v2.receipts import Receipts
 from eddy_v2.render import render_shorts
 from eddy_v2.sources import discover_sources, lock_sources
@@ -227,7 +227,18 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
     gates = {row["name"] for row in rows if row["event"] == "gate" and row["status"] == "pass"}
     assert result.status == "blocked"
-    assert {"motion_artifact", "motion_visual_qa", "caption_sidecars", "long_media_integrity", "short_media_integrity", "launch_package", "final_media_probe"} <= gates
+    assert {
+        "source_safety",
+        "cut_integrity",
+        "motion_artifact",
+        "motion_collision_proof",
+        "motion_visual_qa",
+        "caption_sidecars",
+        "long_media_integrity",
+        "short_media_integrity",
+        "launch_package",
+        "final_media_probe",
+    } <= gates
     assert any(row["event"] == "gate" and row["name"] == "audio_quality" and row["status"] == "failed" for row in rows)
     assert any(row["event"] == "motion_composite" and row["surface"] == "long" for row in rows)
     assert any(row["event"] == "motion_composite" and row["surface"] == "shorts" for row in rows)
@@ -460,6 +471,32 @@ def test_short_starts_use_speech_density_not_only_long_bursts():
     assert all(any(start < end and start + 15 > interval_start for interval_start, end in intervals) for start in starts)
     assert starts[1] - starts[0] >= 15
     assert starts[2] - starts[1] >= 15
+
+
+def test_short_starts_return_honest_shortfall_when_source_is_too_tight():
+    starts = select_short_starts([(0, 16)], 16, 3)
+    assert starts == [0.0]
+
+
+def test_cut_integrity_rejects_out_of_bounds_segments(tmp_path: Path):
+    receipts = Receipts(tmp_path / "receipts.jsonl")
+    plan = EditPlan(
+        source_duration_s=20,
+        long_segment=Segment(start_s=12, duration_s=12, reason="test_bad_segment"),
+        short_starts_s=[1, 5, 12],
+        non_silent_intervals=[(0, 8), (18, 24)],
+    )
+
+    with pytest.raises(RuntimeError, match="cut_integrity_failed"):
+        validate_cut_integrity(plan, receipts)
+
+    rows = receipts.read_all()
+    failed = next(row for row in rows if row["event"] == "gate" and row["name"] == "cut_integrity")
+    assert failed["status"] == "failed"
+    assert "long_segment_exceeds_source" in failed["reasons"]
+    assert "short_starts_too_close" in failed["reasons"]
+    assert "short_03_exceeds_source" in failed["reasons"]
+    assert "non_silent_interval_02_out_of_bounds" in failed["reasons"]
 
 
 def test_cost_cap_blocks(tmp_path: Path):
@@ -1046,7 +1083,7 @@ def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatc
 
 
 def test_bakeoff_compares_explicit_current_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    folder = make_layered_fixture(tmp_path / "footage", 20)
+    folder = make_layered_fixture(tmp_path / "footage", 50)
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     result = edit_folder(folder, local_only=True, target_duration_s=2)
     current = tmp_path / "current-eddy-run"

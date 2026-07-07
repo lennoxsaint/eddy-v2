@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .commands import ffprobe_json, run_command
+from .plan import EditPlan
 from .receipts import Receipts
 
 
@@ -30,6 +31,53 @@ def _quarantine(path: Path, run_dir: Path, receipts: Receipts, *, gate: str, rea
     if path.exists():
         path.replace(target)
     receipts.log("gate", name=gate, status="failed", reason=reason, output=str(path), quarantine=str(target))
+
+
+def validate_cut_integrity(
+    plan: EditPlan,
+    receipts: Receipts,
+    *,
+    short_duration_s: float = 15.0,
+    min_short_gap_s: float = 15.0,
+) -> None:
+    gate = "cut_integrity"
+    reasons: list[str] = []
+    source_duration = plan.source_duration_s
+    long_start = plan.long_segment.start_s
+    long_duration = plan.long_segment.duration_s
+    long_end = long_start + long_duration
+    if source_duration <= 0:
+        reasons.append("source_duration_invalid")
+    if long_start < 0:
+        reasons.append("long_segment_negative_start")
+    if long_duration <= 0:
+        reasons.append("long_segment_nonpositive_duration")
+    if long_end > source_duration + 0.75:
+        reasons.append("long_segment_exceeds_source")
+    for index, start in enumerate(plan.short_starts_s):
+        if start < 0:
+            reasons.append(f"short_{index + 1:02d}_negative_start")
+        if start + short_duration_s > source_duration + 0.75:
+            reasons.append(f"short_{index + 1:02d}_exceeds_source")
+    starts = sorted(plan.short_starts_s)
+    for index, start in enumerate(starts[:-1]):
+        if starts[index + 1] - start < min_short_gap_s:
+            reasons.append("short_starts_too_close")
+            break
+    for index, (start, end) in enumerate(plan.non_silent_intervals):
+        if start < 0 or end > source_duration + 0.75 or end <= start:
+            reasons.append(f"non_silent_interval_{index + 1:02d}_out_of_bounds")
+            break
+    payload = {
+        "source_duration_s": round(source_duration, 3),
+        "long_segment": plan.long_segment.as_dict(),
+        "short_starts_s": [round(start, 3) for start in plan.short_starts_s],
+        "short_count": len(plan.short_starts_s),
+    }
+    if reasons:
+        receipts.log("gate", name=gate, status="failed", reasons=sorted(set(reasons)), **payload)
+        raise RuntimeError("cut_integrity_failed")
+    receipts.log("gate", name=gate, status="pass", **payload)
 
 
 def validate_long_video(run_dir: Path, output: Path, receipts: Receipts, *, expected_duration_s: float) -> None:

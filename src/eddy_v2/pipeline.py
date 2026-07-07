@@ -12,7 +12,7 @@ from .models import create_intent
 from .plan import create_edit_plan
 from .policy import RunPolicy
 from .proof import audio_gate_blockers, read_json_object, write_audio_proof
-from .qa import validate_launch_package
+from .qa import validate_cut_integrity, validate_launch_package
 from .receipts import Receipts
 from .render import render_long, render_shorts
 from .review import build_review_packet
@@ -61,6 +61,7 @@ def edit_folder(
             host_intent_payload=host_intent_payload,
         )
         plan = create_edit_plan(sources, run_dir, intent, receipts)
+        validate_cut_integrity(plan, receipts)
         video = render_long(sources, run_dir, intent, receipts, policy, cost, plan=plan)
         audio_proof = write_audio_proof(run_dir, receipts)
         audio_summary = read_json_object(audio_proof)
@@ -115,6 +116,9 @@ def edit_folder(
         if before != after:
             blockers.append("source_hash_changed")
             receipts.log("blocker", code="source_hash_changed", before=before, after=after)
+            receipts.log("gate", name="source_safety", status="failed", before=before, after=after)
+        else:
+            receipts.log("gate", name="source_safety", status="pass", source_hashes=after)
         receipts.log("run_finish", status="blocked" if blockers else "complete", blockers=blockers, **cost.summary())
     return RunResult(run_dir=run_dir, status="blocked" if blockers else "complete", blockers=blockers)
 
