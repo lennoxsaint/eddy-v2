@@ -109,10 +109,16 @@ Completed runs also write `final/review/review-packet.json`, `final/review/READM
 Use `eddy review <run> --long-edit <score> --motion <score> --audio <score> --shorts <score>` to record that taste review back into the run. The command updates the review packet and scorecard, but it keeps `publishable_8_of_10` false when machine blockers or audio quality blockers are still present.
 
 `scorecard.json` includes `proof_layers` so operators can inspect the run without collapsing proof states:
-`hero_run_proof`, `shorts_proof`, `cloud_cost_proof`, `human_review_proof`, `caption_proof`, and `final_publishability`.
+`hero_run_proof`, `shorts_proof`, `cloud_cost_proof`, `human_review_proof`, `caption_proof`,
+`run_provenance_proof`, and `final_publishability`.
 The same section is refreshed after `eddy edit`, `eddy audio-proof`, and `eddy review`. When blocked,
 it includes secret-safe unblock actions: provider environment-variable options, the exact
 `eddy audio-proof` retry command, and the `eddy review` command template. It never records token values.
+
+Every new run also writes secret-safe `eddy_provenance` into `receipts.jsonl`, `manifest.json`,
+`scorecard.json`, and the launch kit. It records the Eddy package version, git commit/branch when the
+repo is available, dirty-worktree state, run settings, and the Node/HyperFrames renderer boundary.
+That keeps bakeoffs honest about which Eddy commit produced a hero artifact.
 
 ## Scope Boundaries
 

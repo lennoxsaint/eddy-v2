@@ -239,6 +239,52 @@ def _review_reels_proof(review_packet: Any) -> dict[str, Any]:
     }
 
 
+def _run_provenance(run_dir: Path, scorecard: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+    scorecard_provenance = scorecard.get("eddy_provenance")
+    if isinstance(scorecard_provenance, dict):
+        source = "scorecard"
+        provenance = scorecard_provenance
+    else:
+        manifest = read_json_object(run_dir / "manifest.json") or {}
+        manifest_provenance = manifest.get("eddy_provenance")
+        if isinstance(manifest_provenance, dict):
+            source = "manifest"
+            provenance = manifest_provenance
+        else:
+            start = _latest(rows, "run_start") or {}
+            start_provenance = start.get("eddy_provenance")
+            source = "receipt" if isinstance(start_provenance, dict) else "missing"
+            provenance = start_provenance if isinstance(start_provenance, dict) else {}
+
+    git_raw = provenance.get("git")
+    git = git_raw if isinstance(git_raw, dict) else {}
+    settings_raw = provenance.get("run_settings")
+    settings = settings_raw if isinstance(settings_raw, dict) else {}
+    renderer_raw = provenance.get("renderer_boundary")
+    renderer = renderer_raw if isinstance(renderer_raw, dict) else {}
+    missing = []
+    if not provenance.get("eddy_v2_version"):
+        missing.append("eddy_v2_version")
+    if not git.get("commit"):
+        missing.append("git.commit")
+    if not {"local_only", "cloud_budget_usd"}.issubset(settings):
+        missing.append("run_settings")
+    if not renderer.get("node_adapter"):
+        missing.append("renderer_boundary")
+    return {
+        "status": "pass" if not missing else "missing",
+        "source": source,
+        "eddy_v2_version": provenance.get("eddy_v2_version"),
+        "git_commit": git.get("commit"),
+        "git_branch": git.get("branch"),
+        "git_dirty": git.get("dirty"),
+        "git_available": bool(git.get("available")),
+        "run_settings": settings,
+        "renderer_boundary": renderer,
+        "missing": missing,
+    }
+
+
 def _review_command(run_dir: Path) -> str:
     quoted = shlex.quote(str(run_dir))
     return f"eddy review {quoted} --long-edit 8 --motion 8 --audio 8 --shorts 8"
@@ -355,6 +401,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
     audio_retry_command = _audio_retry_command(run_dir, cap or 25.0)
     review_command = _review_command(run_dir)
     caption = _caption_proof(run_dir, rows)
+    provenance = _run_provenance(run_dir, scorecard, rows)
     unblock_actions = _unblock_actions(
         blockers=final_blockers,
         audio_profile=audio_profile,
@@ -405,6 +452,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
             "review_command_template": review_command,
         },
         "caption_proof": caption,
+        "run_provenance_proof": provenance,
         "final_publishability": {
             "status": final_status,
             "blockers": final_blockers,
@@ -419,6 +467,7 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
     cloud = proof_layers["cloud_cost_proof"]
     human = proof_layers["human_review_proof"]
     caption = proof_layers.get("caption_proof", {"status": "missing"})
+    provenance = proof_layers.get("run_provenance_proof", {"status": "missing"})
     final = proof_layers["final_publishability"]
     audio_retry_command = cloud.get("audio_retry_command") or "none"
     review_command = human.get("review_command_template") or "none"
@@ -444,6 +493,7 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
             f"- audio_quality: {cloud['audio_quality']}",
             f"- human_review_proof: {human['status']}",
             f"- caption_proof: {caption.get('status', 'missing')} ({caption.get('sidecar_source', 'unknown')})",
+            f"- run_provenance_proof: {provenance.get('status', 'missing')} (commit: {provenance.get('git_commit') or 'unknown'}; dirty: {provenance.get('git_dirty')})",
             f"- final_publishability: {final['status']}",
             f"- final_blockers: {', '.join(final['blockers']) if final['blockers'] else 'none'}",
             *provider_lines,

@@ -12,6 +12,7 @@ from .models import create_intent
 from .plan import create_edit_plan
 from .policy import RunPolicy
 from .proof import audio_gate_blockers, build_proof_layers, proof_layers_markdown, read_json_object, refresh_scorecard_proof_layers, write_audio_proof
+from .provenance import build_provenance
 from .qa import validate_cut_integrity, validate_launch_package
 from .receipts import Receipts
 from .render import render_long, render_shorts
@@ -47,9 +48,16 @@ def edit_folder(
     policy = RunPolicy(local_only=local_only, cloud_budget_usd=cloud_budget_usd)
     cost = CostTracker(receipts, cap_usd=cloud_budget_usd)
     blockers: list[str] = []
-    receipts.log("run_start", folder=str(sources.folder), local_only=local_only, cloud_budget_usd=cloud_budget_usd)
+    eddy_provenance = build_provenance(local_only=local_only, cloud_budget_usd=cloud_budget_usd, target_duration_s=target_duration_s)
+    receipts.log(
+        "run_start",
+        folder=str(sources.folder),
+        local_only=local_only,
+        cloud_budget_usd=cloud_budget_usd,
+        eddy_provenance=eddy_provenance,
+    )
     before = lock_sources(sources, receipts, phase="before")
-    write_manifest(run_dir, sources, before)
+    write_manifest(run_dir, sources, before, eddy_provenance=eddy_provenance)
     try:
         intent = create_intent(
             sources,
@@ -94,6 +102,7 @@ def edit_folder(
             plan=plan.as_dict(),
             review_packet=review_packet,
             audio_proof=audio_proof,
+            eddy_provenance=eddy_provenance,
         )
         write_scorecard(
             run_dir,
@@ -104,13 +113,14 @@ def edit_folder(
             plan=plan.as_dict(),
             review_packet=review_packet,
             audio_proof=audio_proof,
+            eddy_provenance=eddy_provenance,
         )
         validate_launch_package(run_dir, video, shorts, receipts)
         receipts.log("gate", name="final_media_probe", status="pass", probe=ffprobe_json(video))
     except Exception as exc:
         blockers.append(str(exc))
         receipts.log("blocker", code="pipeline_failed", error=str(exc))
-        write_scorecard(run_dir, cost.summary(), long_video=None, shorts=[], blockers=blockers, plan=None)
+        write_scorecard(run_dir, cost.summary(), long_video=None, shorts=[], blockers=blockers, plan=None, eddy_provenance=eddy_provenance)
     finally:
         after = lock_sources(sources, receipts, phase="after")
         if before != after:
@@ -133,6 +143,7 @@ def write_launch_kit(
     plan: dict | None,
     review_packet: Path | None = None,
     audio_proof: Path | None = None,
+    eddy_provenance: dict[str, Any] | None = None,
 ) -> None:
     kit = run_dir / "final" / "launch-kit"
     kit.mkdir(parents=True, exist_ok=True)
@@ -149,6 +160,7 @@ def write_launch_kit(
         "review_packet": str(review_packet) if review_packet else None,
         "audio_proof_path": str(audio_proof) if audio_proof else None,
         "audio_proof": read_json_object(audio_proof),
+        "eddy_provenance": eddy_provenance,
     }
     (kit / "launch-kit.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     (kit / "README.md").write_text(f"# {data['title']}\n\n{data['description']}\n", encoding="utf-8")
@@ -164,6 +176,7 @@ def write_scorecard(
     plan: dict | None,
     review_packet: Path | None = None,
     audio_proof: Path | None = None,
+    eddy_provenance: dict[str, Any] | None = None,
 ) -> None:
     audio_summary = read_json_object(audio_proof)
     score = {
@@ -179,6 +192,7 @@ def write_scorecard(
         "review_packet": str(review_packet) if review_packet else None,
         "audio_proof_path": str(audio_proof) if audio_proof else None,
         "audio_proof": audio_summary,
+        "eddy_provenance": eddy_provenance,
     }
     proof_layers = build_proof_layers(run_dir, scorecard=score)
     score["proof_layers"] = proof_layers
@@ -194,6 +208,8 @@ def write_scorecard(
                 f"- cost: ${cost_summary['spent_usd']:.4f} / ${cost_summary['cap_usd']:.2f}",
                 f"- audio_quality: {(audio_summary or {}).get('quality_status', 'missing')}",
                 f"- review_packet: {score['review_packet'] or 'none'}",
+                f"- eddy_commit: {((eddy_provenance or {}).get('git') or {}).get('commit') or 'unknown'}",
+                f"- eddy_dirty: {((eddy_provenance or {}).get('git') or {}).get('dirty') if eddy_provenance else 'unknown'}",
                 f"- blockers: {', '.join(blockers) if blockers else 'none'}",
                 "- publishable_8_of_10: false pending Lennox review",
                 "",

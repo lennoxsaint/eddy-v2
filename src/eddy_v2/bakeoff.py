@@ -133,6 +133,10 @@ def summarize_run(run_dir: Path, *, label: str) -> dict[str, Any]:
     blockers_raw = scorecard.get("blockers")
     blockers = blockers_raw if isinstance(blockers_raw, list) else []
     proof_layers = build_proof_layers(run_dir, scorecard=scorecard, rows=rows)
+    provenance_raw = scorecard.get("eddy_provenance")
+    provenance = provenance_raw if isinstance(provenance_raw, dict) else {}
+    run_provenance_raw = proof_layers.get("run_provenance_proof")
+    run_provenance = run_provenance_raw if isinstance(run_provenance_raw, dict) else {}
     return {
         "label": label,
         "run_dir": str(run_dir),
@@ -150,6 +154,8 @@ def summarize_run(run_dir: Path, *, label: str) -> dict[str, Any]:
             "cap_usd": cost.get("cap_usd"),
         },
         "audio_proof": audio_proof,
+        "eddy_provenance": provenance,
+        "run_provenance": run_provenance,
         "proof_layers": proof_layers,
         "source_hash_intact": _source_hash_intact(rows),
         "blockers": blockers,
@@ -286,6 +292,7 @@ def _completion_audit(v2: dict[str, Any]) -> dict[str, Any]:
         "cloud_cost_proof": proof_layers.get("cloud_cost_proof", {"status": "missing"}),
         "human_review_proof": proof_layers.get("human_review_proof", {"status": "missing"}),
         "caption_proof": proof_layers.get("caption_proof", {"status": "missing"}),
+        "run_provenance_proof": proof_layers.get("run_provenance_proof", {"status": "missing"}),
         "remaining_blockers": remaining,
         "unblock_actions": actions,
     }
@@ -333,6 +340,7 @@ def _markdown(report: dict[str, Any]) -> str:
     cloud = completion["cloud_cost_proof"]
     human = completion["human_review_proof"]
     caption = completion["caption_proof"]
+    provenance = completion["run_provenance_proof"]
     lines = [
         "# Eddy V2 Bakeoff",
         "",
@@ -350,6 +358,8 @@ def _markdown(report: dict[str, Any]) -> str:
         f"- shorts_count: {v2['shorts_count']}",
         f"- audio_quality: {(v2.get('audio_proof') or {}).get('quality_status', 'missing')}",
         f"- receipts_rows: {v2['receipts']['row_count']}",
+        f"- eddy_commit: {v2['run_provenance'].get('git_commit') or 'unknown'}",
+        f"- eddy_dirty: {v2['run_provenance'].get('git_dirty')}",
         f"- source_hash_intact: {v2['source_hash_intact']}",
         "",
         "## Current Eddy",
@@ -397,6 +407,7 @@ def _markdown(report: dict[str, Any]) -> str:
             f"- audio_quality: {cloud.get('audio_quality', 'missing')}",
             f"- human_review_proof: {human.get('status', 'missing')}",
             f"- caption_proof: {caption.get('status', 'missing')} ({caption.get('sidecar_source', 'unknown')})",
+            f"- run_provenance_proof: {provenance.get('status', 'missing')} (commit: {provenance.get('git_commit') or 'unknown'}; dirty: {provenance.get('git_dirty')})",
             f"- remaining_blockers: {', '.join(completion['remaining_blockers']) if completion['remaining_blockers'] else 'none'}",
         ]
     )

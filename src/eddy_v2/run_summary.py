@@ -30,6 +30,7 @@ def _proof_statuses(proof_layers: dict[str, Any]) -> dict[str, str]:
         "cloud_cost_proof",
         "human_review_proof",
         "caption_proof",
+        "run_provenance_proof",
         "final_publishability",
     ):
         layer = _dict(proof_layers.get(name))
@@ -50,6 +51,7 @@ def build_run_output_payload(
     final_publishability = _dict(proof_layers.get("final_publishability"))
     human_review = _dict(proof_layers.get("human_review_proof"))
     cloud_cost = _dict(proof_layers.get("cloud_cost_proof"))
+    run_provenance = _dict(proof_layers.get("run_provenance_proof"))
     scorecard_blockers = _list(scorecard.get("blockers"))
     final_blockers = _list(final_publishability.get("blockers"))
     selected_blockers = [str(item) for item in final_blockers or blockers or scorecard_blockers]
@@ -69,7 +71,9 @@ def build_run_output_payload(
         "shorts_count": int(scorecard.get("shorts_count") or 0),
         "shorts": [str(path) for path in _list(scorecard.get("shorts"))],
         "cost": scorecard.get("cost") or {},
+        "eddy_provenance": scorecard.get("eddy_provenance") or {},
         "proof_statuses": _proof_statuses(proof_layers),
+        "run_provenance": run_provenance,
         "review_page": _review_page(scorecard),
         "review_command": human_review.get("review_command_template"),
         "audio_retry_command": cloud_cost.get("audio_retry_command"),

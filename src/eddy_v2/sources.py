@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .receipts import Receipts
 
@@ -68,6 +69,8 @@ def lock_sources(sources: Sources, receipts: Receipts, *, phase: str) -> dict[st
     return hashes
 
 
-def write_manifest(run_dir: Path, sources: Sources, before_hashes: dict[str, str]) -> None:
+def write_manifest(run_dir: Path, sources: Sources, before_hashes: dict[str, str], *, eddy_provenance: dict[str, Any] | None = None) -> None:
     manifest = {"sources": sources.as_dict(), "source_sha256_before": before_hashes}
+    if eddy_provenance is not None:
+        manifest["eddy_provenance"] = eddy_provenance
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")

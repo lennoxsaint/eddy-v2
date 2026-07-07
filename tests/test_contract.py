@@ -26,6 +26,7 @@ from eddy_v2.qa import validate_cut_integrity, validate_motion_artifact, validat
 from eddy_v2.quality_review import apply_quality_review
 from eddy_v2.receipts import Receipts
 from eddy_v2.render import render_shorts
+from eddy_v2.run_summary import build_run_output_payload
 from eddy_v2.sources import discover_sources, lock_sources
 
 
@@ -215,9 +216,30 @@ def test_receipts_cover_core_events(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("EDDY_V2_FAKE_HYPERFRAMES", "1")
     result = edit_folder(folder, target_duration_s=2)
     rows = Receipts(result.run_dir / "receipts.jsonl").read_all()
+    manifest = json.loads((result.run_dir / "manifest.json").read_text(encoding="utf-8"))
     launch_kit = json.loads((result.run_dir / "final" / "launch-kit" / "launch-kit.json").read_text(encoding="utf-8"))
+    scorecard = json.loads((result.run_dir / "scorecard.json").read_text(encoding="utf-8"))
+    scorecard_md = (result.run_dir / "scorecard.md").read_text(encoding="utf-8")
+    payload = build_run_output_payload(result.run_dir, status=result.status, blockers=result.blockers)
     events = {row["event"] for row in rows}
     assert {"run_start", "source_hash", "transcript", "semantic_plan", "ffmpeg", "hyperframes", "cut_plan", "audio_proof", "gate", "run_finish"} <= events
+    run_start = next(row for row in rows if row["event"] == "run_start")
+    provenance = run_start["eddy_provenance"]
+    assert provenance["eddy_v2_version"] == "0.1.0"
+    assert provenance["git"]["commit"]
+    assert provenance["run_settings"]["local_only"] is False
+    assert provenance["run_settings"]["cloud_budget_usd"] == 25.0
+    assert provenance["run_settings"]["target_duration_s"] == 2
+    assert provenance["renderer_boundary"]["node_adapter"] == "renderer/hyperframes-runner.mjs"
+    assert manifest["eddy_provenance"]["git"]["commit"] == provenance["git"]["commit"]
+    assert launch_kit["eddy_provenance"]["git"]["commit"] == provenance["git"]["commit"]
+    assert scorecard["eddy_provenance"]["git"]["commit"] == provenance["git"]["commit"]
+    assert scorecard["proof_layers"]["run_provenance_proof"]["status"] == "pass"
+    assert scorecard["proof_layers"]["run_provenance_proof"]["git_commit"] == provenance["git"]["commit"]
+    assert "- run_provenance_proof: pass" in scorecard_md
+    assert payload["proof_statuses"]["run_provenance_proof"] == "pass"
+    assert payload["run_provenance"]["git_commit"] == provenance["git"]["commit"]
+    assert payload["eddy_provenance"]["git"]["commit"] == provenance["git"]["commit"]
     assert any(row["event"] == "transcript" and row["status"] == "missing" and row["code"] == "transcript_source_missing" for row in rows)
     assert any(row["event"] == "semantic_plan" and row["status"] == "fallback" for row in rows)
     assert launch_kit["chapters"][0]["source"] == "fallback"
