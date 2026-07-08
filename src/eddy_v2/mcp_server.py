@@ -58,10 +58,14 @@ TOOLS = [
     },
     {
         "name": "eddy_v2_scorecard",
-        "description": "Read the human-facing Markdown scorecard for a run.",
+        "description": "Read a run scorecard as Markdown by default or JSON when requested.",
         "inputSchema": {
             "type": "object",
-            "properties": {"run_dir": {"type": "string"}},
+            "properties": {
+                "run_dir": {"type": "string"},
+                "json": {"type": "boolean"},
+                "format": {"type": "string", "enum": ["markdown", "json"]},
+            },
             "required": ["run_dir"],
         },
     },
@@ -148,6 +152,23 @@ def _scorecard_text(run_dir: Path) -> str:
     if not path.exists():
         raise FileNotFoundError(f"scorecard not found: {path}")
     return path.read_text(encoding="utf-8")
+
+
+def _scorecard_json(run_dir: Path) -> dict[str, Any]:
+    path = run_dir / "scorecard.json"
+    if not path.exists():
+        raise FileNotFoundError(f"scorecard JSON not found: {path}")
+    parsed = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(parsed, dict):
+        raise ValueError(f"scorecard JSON must be an object: {path}")
+    return parsed
+
+
+def _wants_json_scorecard(args: dict[str, Any]) -> bool:
+    output_format = str(args.get("format") or "").lower()
+    if output_format and output_format not in {"markdown", "json"}:
+        raise ValueError("scorecard format must be markdown or json")
+    return bool(args.get("json")) or output_format == "json"
 
 
 def _host_intent_payload(args: dict[str, Any]) -> dict[str, Any] | None:
@@ -259,7 +280,10 @@ def handle(method: str, params: dict[str, Any]) -> dict[str, Any] | None:
         if name == "eddy_v2_artifacts":
             return _json_content(_artifacts_payload(Path(args["run_dir"])))
         if name == "eddy_v2_scorecard":
-            return _text_content(_scorecard_text(Path(args["run_dir"])))
+            run_dir = Path(args["run_dir"])
+            if _wants_json_scorecard(args):
+                return _json_content(_scorecard_json(run_dir))
+            return _text_content(_scorecard_text(run_dir))
         if name == "eddy_v2_bakeoff":
             return _json_content(_bakeoff_payload(args))
         if name == "eddy_v2_review":

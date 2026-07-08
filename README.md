@@ -71,6 +71,8 @@ eddy-v2-mcp
 
 The server supports `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`.
 It exposes the same editing, bakeoff, status, scorecard, review, and audio-proof surfaces as the CLI.
+`eddy_v2_scorecard` returns Markdown by default and returns the same machine-readable payload as
+`eddy scorecard <run> --json` when called with `json: true` or `format: "json"`.
 
 ## Model Autonomy
 

@@ -17,6 +17,10 @@ available. Fall back to the CLI.
 5. If Studio Sound credentials become available after a run, use `eddy audio-proof <run>` to retry cloud audio proof from the existing extracted WAV instead of rerunning the full edit.
 6. If Lennox gives 8/10 quality scores, record them with `eddy review <run>` instead of editing the scorecard by hand.
 
+For MCP host-agent repair loops, call `eddy_v2_scorecard` with `json: true` or `format: "json"`
+when you need the same structured payload as `eddy scorecard <run> --json`; omit those options for
+the human-facing Markdown scorecard.
+
 Motion proof lives under each run's `motion/` projects. Expect `frame.md`, `storyboard.md`,
 `storyboard.html`, `motion-plan.json`, `motion-collision-proof.json`, `motion-lint.json`, and
 `motion-inspect.json` before treating overlays or Shorts cards as compositor-safe.

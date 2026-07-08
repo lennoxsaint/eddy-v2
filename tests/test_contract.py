@@ -1050,6 +1050,9 @@ def test_mcp_schemas_match_cli_surface():
     assert required["eddy_v2_audio_proof"] == ["run_dir"]
     bakeoff_schema = next(tool["inputSchema"] for tool in TOOLS if tool["name"] == "eddy_v2_bakeoff")
     assert "v2_run" in bakeoff_schema["properties"]
+    scorecard_schema = next(tool["inputSchema"] for tool in TOOLS if tool["name"] == "eddy_v2_scorecard")
+    assert {"run_dir", "json", "format"} <= set(scorecard_schema["properties"])
+    assert scorecard_schema["properties"]["format"]["enum"] == ["markdown", "json"]
 
 
 def test_mcp_initialize_and_stdio_smoke():
@@ -1120,6 +1123,12 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
     status = mcp_json(handle("tools/call", {"name": "eddy_v2_status", "arguments": {"run_dir": str(run_dir)}}))
     artifacts = mcp_json(handle("tools/call", {"name": "eddy_v2_artifacts", "arguments": {"run_dir": str(run_dir)}}))
     scorecard = handle("tools/call", {"name": "eddy_v2_scorecard", "arguments": {"run_dir": str(run_dir)}})["content"][0]["text"]
+    scorecard_json = mcp_json(
+        handle("tools/call", {"name": "eddy_v2_scorecard", "arguments": {"run_dir": str(run_dir), "json": True}})
+    )
+    scorecard_format_json = mcp_json(
+        handle("tools/call", {"name": "eddy_v2_scorecard", "arguments": {"run_dir": str(run_dir), "format": "json"}})
+    )
     cli_status = subprocess.run(
         [sys.executable, "-m", "eddy_v2.cli", "status", str(run_dir), "--json"],
         text=True,
@@ -1180,7 +1189,12 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
     assert cli_audio_proof.returncode == 2, cli_audio_proof.stderr
     assert json.loads(cli_status.stdout)["status"] == status["status"]
     assert json.loads(cli_artifacts.stdout)["files"] == artifacts["files"]
-    assert json.loads(cli_scorecard.stdout)["status"] == "blocked"
+    cli_scorecard_payload = json.loads(cli_scorecard.stdout)
+    assert cli_scorecard_payload["status"] == "blocked"
+    assert scorecard_json == cli_scorecard_payload
+    assert scorecard_format_json == cli_scorecard_payload
+    assert scorecard_json["long_video"] == started["long_video"]
+    assert scorecard_json["proof_layers"]["final_publishability"]["status"] == "blocked"
     cli_audio_payload = json.loads(cli_audio_proof.stdout)
     assert cli_audio_payload["status"] == "blocked"
     assert cli_audio_payload["quality_status"] == "local_degraded_fallback"
