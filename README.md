@@ -108,6 +108,18 @@ whether 1Password CLI is installed and signed in before trying a Studio Sound re
 
 Use `eddy audio-proof <run>` when a run already exists but Studio Sound credentials become available later. It reuses `audio/source-audio.wav`, verifies source hashes from `manifest.json`, retries Descript/Auphonic/ElevenLabs under the same cost cap, remuxes `final/video.mp4` when cloud audio passes, backs up the previous long video in `quarantine/`, and refreshes `final/audio-proof.json`, the scorecard, launch kit, and review packet. `eddy audio-proof <run> --json` makes the blocked/pass result explicit for agents. `eddy audio-proof --local-only <run>` refuses cloud audio before upload/fake-provider branches and leaves the existing proof blockers in place.
 
+If the provider secret lives in 1Password, unlock or sign in before retrying and use an env file with
+1Password references so tokens never appear in shell history or receipts:
+
+```bash
+op signin
+op run --env-file .env.audio -- eddy audio-proof <run> --cloud-budget 25 --json
+```
+
+The env file must provide one configured backend, preferably `DESCRIPT_API_KEY` for Strong Studio Sound,
+or `AUPHONIC_API_KEY` plus `AUPHONIC_PRESET` / `AUPHONIC_PRESET_UUID`, or `ELEVENLABS_API_KEY` for an
+approved cloud fallback. Do not store plaintext credentials in the repo.
+
 For dry tests, set `EDDY_V2_FAKE_DESCRIPT=1`, `EDDY_V2_FAKE_AUPHONIC=1`, or `EDDY_V2_FAKE_ELEVENLABS=1` with dummy provider credentials; this exercises the same receipt/parity path without network egress or credits. `--local-only` refuses all cloud audio providers even when fake mode is present.
 
 ## Proof Gates

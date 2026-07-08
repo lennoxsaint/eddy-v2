@@ -95,6 +95,7 @@ REQUIRED_SKILL_TERMS = [
     "eddy edit <folder>",
     "eddy audio-proof <run>",
     "eddy review <run>",
+    "op run --env-file",
     "--local-only",
     "No platform publish, full-video upload, or scheduling actions exist",
 ]

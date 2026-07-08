@@ -25,6 +25,9 @@ The bake-off exists to answer one question: can Eddy V2 beat the current Eddy pa
 6. Record all blockers in receipts and a human scorecard. Do not patch around a blocker without adding a regression test or a gate.
 7. Read `completion_audit` in `bakeoff.json` before declaring a winner. The run folder can prove hero media, Shorts yield, caption provenance, cloud/cost, and human-review state. Bakeoff also runs `python scripts/contract_audit.py` to prove repo setup at report time; full test proof still requires the listed external commands or CI.
 8. If `remaining_blockers` is non-empty, follow `unblock_actions` instead of guessing. These actions are secret-safe: they name environment variables and commands, not credential values.
+9. If audio is blocked on credentials and the secret lives in 1Password, sign in with `op whoami` /
+   `op signin`, then use `op run --env-file .env.audio -- eddy audio-proof <run> --cloud-budget 25 --json`.
+   Prefer `DESCRIPT_API_KEY`; Auphonic and ElevenLabs can prove a cloud fallback only.
 
 ## Scorecard
 

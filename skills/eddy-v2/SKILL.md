@@ -49,6 +49,17 @@ configured cloud audio providers under the current cost cap, and remuxes `final/
 cloud audio passes parity. Use `--local-only` when cloud egress is forbidden; it will refuse provider
 branches and keep the existing audio blockers.
 
+When credentials live in 1Password, do not print or paste token values. First make sure `op whoami`
+is signed in, then run the retry through 1Password references:
+
+```bash
+op run --env-file .env.audio -- eddy audio-proof <run> --cloud-budget 25 --json
+```
+
+Prefer `DESCRIPT_API_KEY` for Strong Studio Sound. `AUPHONIC_API_KEY` plus `AUPHONIC_PRESET` /
+`AUPHONIC_PRESET_UUID`, or `ELEVENLABS_API_KEY`, can prove an approved cloud fallback but not Descript
+Studio Sound.
+
 ## Hard boundaries
 
 - Never edit, move, delete, or overwrite raw source files.
