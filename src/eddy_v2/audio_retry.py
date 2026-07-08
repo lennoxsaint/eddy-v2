@@ -198,6 +198,8 @@ def retry_audio_proof(run_dir: Path, *, local_only: bool = False, cloud_budget_u
         "strong_studio_sound": proof.get("strong_studio_sound"),
         "quality_blockers": proof.get("quality_blockers") or [],
         "provider_attempts": proof.get("providers") if isinstance(proof.get("providers"), dict) else {},
+        "audio_retry_command": proof.get("audio_retry_command"),
+        "onepassword_audio_retry_command": proof.get("onepassword_audio_retry_command"),
         "cost": cost_summary,
     }
     receipts.log("audio_proof_retry", **result)

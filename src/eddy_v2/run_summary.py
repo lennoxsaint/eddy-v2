@@ -77,5 +77,6 @@ def build_run_output_payload(
         "review_page": _review_page(scorecard),
         "review_command": human_review.get("review_command_template"),
         "audio_retry_command": cloud_cost.get("audio_retry_command"),
+        "onepassword_audio_retry_command": cloud_cost.get("onepassword_audio_retry_command"),
         "next_actions": _list(final_publishability.get("unblock_actions")),
     }

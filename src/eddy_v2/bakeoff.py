@@ -232,6 +232,7 @@ def build_bakeoff_report(
     completion_audit = _completion_audit(v2)
     remaining_blockers = completion_audit["remaining_blockers"]
     winner = _winner(completion_audit)
+    cloud_cost = completion_audit["cloud_cost_proof"]
     if receipts:
         receipts.log(
             "bakeoff_compare",
@@ -256,6 +257,8 @@ def build_bakeoff_report(
         "winner": winner,
         "winner_bar": "Lennox would publish it; long edit, motion, audio, and Shorts are each 8/10+.",
         "remaining_blockers": remaining_blockers,
+        "audio_retry_command": cloud_cost.get("audio_retry_command"),
+        "onepassword_audio_retry_command": cloud_cost.get("onepassword_audio_retry_command"),
         "unblock_actions": completion_audit["unblock_actions"],
         "current_output_proof": current_output_proof,
         "candidates": {"eddy_v2": v2, "current_eddy": current},
@@ -473,6 +476,10 @@ def _markdown(report: dict[str, Any]) -> str:
             f"- remaining_blockers: {', '.join(completion['remaining_blockers']) if completion['remaining_blockers'] else 'none'}",
         ]
     )
+    if report.get("audio_retry_command"):
+        lines.append(f"- audio_retry_command: {report['audio_retry_command']}")
+    if report.get("onepassword_audio_retry_command"):
+        lines.append(f"- onepassword_audio_retry_command: {report['onepassword_audio_retry_command']}")
     actions = completion.get("unblock_actions")
     if isinstance(actions, list) and actions:
         lines.append("- unblock_actions: " + ", ".join(str(action.get("action", "unknown")) for action in actions if isinstance(action, dict)))

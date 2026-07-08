@@ -303,11 +303,17 @@ def _audio_retry_command(run_dir: Path, cap: float) -> str:
     return f"eddy audio-proof {quoted} --cloud-budget {_format_budget(cap)}"
 
 
+def _onepassword_audio_retry_command(run_dir: Path, cap: float, *, env_file: str = ".env.audio") -> str:
+    quoted_env = shlex.quote(env_file)
+    return f"op run --env-file {quoted_env} -- {_audio_retry_command(run_dir, cap)} --json"
+
+
 def _unblock_actions(
     *,
     blockers: list[str],
     audio_profile: dict[str, Any],
     audio_retry_command: str,
+    onepassword_audio_retry_command: str,
     review_command: str,
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
@@ -320,6 +326,8 @@ def _unblock_actions(
                 "action": "configure_one_audio_provider",
                 "options": options,
                 "then_run": audio_retry_command,
+                "onepassword_then_run": onepassword_audio_retry_command,
+                "onepassword_env_file": ".env.audio",
             }
         )
     if "strong_studio_sound_not_proven" in blockers:
@@ -331,6 +339,8 @@ def _unblock_actions(
                 "action": "prove_descript_studio_sound_parity",
                 "preferred_required": strong or ["DESCRIPT_API_KEY"],
                 "then_run": audio_retry_command,
+                "onepassword_then_run": onepassword_audio_retry_command,
+                "onepassword_env_file": ".env.audio",
             }
         )
     if "pending_lennox_8_of_10_review" in blockers:
@@ -407,6 +417,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
     audio_profile = _audio_profile(audio)
     audio_provider_attempts = _audio_provider_attempts(audio)
     audio_retry_command = _audio_retry_command(run_dir, cap or 25.0)
+    onepassword_audio_retry_command = _onepassword_audio_retry_command(run_dir, cap or 25.0)
     review_command = _review_command(run_dir)
     caption = _caption_proof(run_dir, rows)
     provenance = _run_provenance(run_dir, scorecard, rows)
@@ -414,6 +425,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
         blockers=final_blockers,
         audio_profile=audio_profile,
         audio_retry_command=audio_retry_command,
+        onepassword_audio_retry_command=onepassword_audio_retry_command,
         review_command=review_command,
     )
 
@@ -452,6 +464,7 @@ def build_proof_layers(run_dir: Path, *, scorecard: dict[str, Any] | None = None
                 audio_profile.get("audio_quality_unblock_options") if isinstance(audio_profile.get("audio_quality_unblock_options"), list) else []
             ),
             "audio_retry_command": audio_retry_command,
+            "onepassword_audio_retry_command": onepassword_audio_retry_command,
         },
         "human_review_proof": {
             "status": human_status,
@@ -478,6 +491,7 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
     provenance = proof_layers.get("run_provenance_proof", {"status": "missing"})
     final = proof_layers["final_publishability"]
     audio_retry_command = cloud.get("audio_retry_command") or "none"
+    onepassword_audio_retry_command = cloud.get("onepassword_audio_retry_command") or "none"
     review_command = human.get("review_command_template") or "none"
     provider_attempts = cloud.get("provider_attempts") if isinstance(cloud.get("provider_attempts"), dict) else {}
     provider_lines = []
@@ -506,6 +520,7 @@ def proof_layers_markdown(proof_layers: dict[str, Any]) -> str:
             f"- final_blockers: {', '.join(final['blockers']) if final['blockers'] else 'none'}",
             *provider_lines,
             f"- audio_retry_command: {audio_retry_command}",
+            f"- onepassword_audio_retry_command: {onepassword_audio_retry_command}",
             f"- review_command: {review_command}",
             "<!-- proof-layers:end -->",
         ]
@@ -562,6 +577,7 @@ def _receipt_final_blockers(receipts: Receipts, proof_layers: dict[str, Any]) ->
             scope="final_publishability",
             unblock_action=action.get("action"),
             then_run=action.get("then_run"),
+            onepassword_then_run=action.get("onepassword_then_run"),
         )
 
 
@@ -602,7 +618,9 @@ def write_audio_proof(run_dir: Path, receipts: Receipts) -> Path:
     proof["strong_studio_sound_unblock"] = (
         audio_profile.get("strong_studio_sound_unblock") if isinstance(audio_profile.get("strong_studio_sound_unblock"), list) else []
     )
-    proof["audio_retry_command"] = _audio_retry_command(run_dir, _cloud_budget_from_rows(rows))
+    cloud_budget = _cloud_budget_from_rows(rows)
+    proof["audio_retry_command"] = _audio_retry_command(run_dir, cloud_budget)
+    proof["onepassword_audio_retry_command"] = _onepassword_audio_retry_command(run_dir, cloud_budget)
     proof["allowed_upload_scope"] = {
         "descript": "audio_extract_only",
         "auphonic": "audio_extract_only",
@@ -623,6 +641,7 @@ def write_audio_proof(run_dir: Path, receipts: Receipts) -> Path:
         cloud_quality_profile=proof["cloud_quality_profile"],
         provider_attempts=provider_attempts,
         audio_retry_command=proof["audio_retry_command"],
+        onepassword_audio_retry_command=proof["onepassword_audio_retry_command"],
         allowed_upload_scope=proof["allowed_upload_scope"],
     )
     return path

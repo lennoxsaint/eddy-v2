@@ -332,10 +332,15 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     assert attempts["descript"]["missing"] == ["DESCRIPT_API_KEY"]
     assert "pending_lennox_8_of_10_review" in scorecard["proof_layers"]["final_publishability"]["blockers"]
     assert scorecard["proof_layers"]["cloud_cost_proof"]["audio_retry_command"].startswith("eddy audio-proof ")
+    assert scorecard["proof_layers"]["cloud_cost_proof"]["onepassword_audio_retry_command"].startswith(
+        "op run --env-file .env.audio -- eddy audio-proof "
+    )
+    assert scorecard["proof_layers"]["cloud_cost_proof"]["onepassword_audio_retry_command"].endswith(" --json")
     assert audio_proof["provider_attempts"]["descript"]["status"] == "skipped"
     assert audio_proof["provider_attempts"]["descript"]["missing"] == ["DESCRIPT_API_KEY"]
     assert audio_proof["provider_attempts"]["descript"]["uploaded_media"] == "none"
     assert audio_proof["audio_retry_command"].startswith("eddy audio-proof ")
+    assert audio_proof["onepassword_audio_retry_command"].startswith("op run --env-file .env.audio -- eddy audio-proof ")
     assert audio_proof["allowed_upload_scope"] == {
         "descript": "audio_extract_only",
         "auphonic": "audio_extract_only",
@@ -371,10 +376,19 @@ def test_media_qa_gates_are_receipted(tmp_path: Path, monkeypatch: pytest.Monkey
     } in scorecard["proof_layers"]["cloud_cost_proof"]["audio_quality_unblock_options"]
     actions = {action["action"] for action in scorecard["proof_layers"]["final_publishability"]["unblock_actions"]}
     assert {"configure_one_audio_provider", "prove_descript_studio_sound_parity", "record_lennox_quality_review"} <= actions
+    credential_actions = [
+        action
+        for action in scorecard["proof_layers"]["final_publishability"]["unblock_actions"]
+        if action["action"] in {"configure_one_audio_provider", "prove_descript_studio_sound_parity"}
+    ]
+    assert credential_actions
+    assert all(action["onepassword_env_file"] == ".env.audio" for action in credential_actions)
+    assert all(action["onepassword_then_run"].startswith("op run --env-file .env.audio -- eddy audio-proof ") for action in credential_actions)
     assert "<!-- proof-layers:start -->" in scorecard_md
     assert "- caption_proof: warning (editorial_callouts)" in scorecard_md
     assert "- audio_provider_descript: skipped (reason: DESCRIPT_API_KEY missing; uploaded_media: none; missing: DESCRIPT_API_KEY)" in scorecard_md
     assert "- audio_retry_command: eddy audio-proof " in scorecard_md
+    assert "- onepassword_audio_retry_command: op run --env-file .env.audio -- eddy audio-proof " in scorecard_md
     assert "- review_command: eddy review " in scorecard_md
 
 
@@ -1169,6 +1183,7 @@ def test_mcp_read_tools_match_cli_behavior(tmp_path: Path, monkeypatch: pytest.M
     assert started["proof_statuses"]["final_publishability"] == "blocked"
     assert started["review_command"].startswith("eddy review ")
     assert started["audio_retry_command"].startswith("eddy audio-proof ")
+    assert started["onepassword_audio_retry_command"].startswith("op run --env-file .env.audio -- eddy audio-proof ")
     assert {action["action"] for action in started["next_actions"]} >= {
         "configure_one_audio_provider",
         "prove_descript_studio_sound_parity",
@@ -1317,6 +1332,13 @@ def test_mcp_bakeoff_writes_report_with_missing_current_proof(tmp_path: Path, mo
     assert report["completion_audit"]["caption_proof"]["warning"] == "speech_accurate_subtitles_not_proven"
     assert "pending_lennox_8_of_10_review" in report["completion_audit"]["remaining_blockers"]
     assert any(action["action"] == "record_lennox_quality_review" for action in report["completion_audit"]["unblock_actions"])
+    credential_actions = [
+        action
+        for action in report["completion_audit"]["unblock_actions"]
+        if action["action"] in {"configure_one_audio_provider", "prove_descript_studio_sound_parity"}
+    ]
+    assert credential_actions
+    assert all(action["onepassword_then_run"].startswith("op run --env-file .env.audio -- eddy audio-proof ") for action in credential_actions)
 
 
 def test_mcp_bakeoff_can_refresh_existing_v2_run_without_rerender(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -1412,6 +1434,8 @@ def test_audio_proof_retry_uses_existing_extract_and_remuxes_final_video(tmp_pat
     assert retry["audio_gate_status"] == "pass"
     assert retry["strong_studio_sound"] is True
     assert retry["provider_attempts"]["descript"]["status"] == "pass"
+    assert retry["audio_retry_command"].startswith("eddy audio-proof ")
+    assert retry["onepassword_audio_retry_command"].startswith("op run --env-file .env.audio -- eddy audio-proof ")
     assert sum(1 for row in rows if row["event"] == "audio_extract") == 1
     assert any(row["event"] == "source_hash" and row["phase"] == "audio_proof_retry" for row in rows)
     assert any(row["event"] == "audio_retry_remux" and row["status"] == "pass" for row in rows)
@@ -1713,7 +1737,15 @@ def test_bakeoff_records_missing_current_output_proof(tmp_path: Path, monkeypatc
     }
     persisted_report = json.loads((result.run_dir / "bakeoff.json").read_text(encoding="utf-8"))
     assert persisted_report["remaining_blockers"] == report["remaining_blockers"]
-    assert "- remaining_blockers: " in (result.run_dir / "bakeoff.md").read_text(encoding="utf-8")
+    assert persisted_report["onepassword_audio_retry_command"].startswith("op run --env-file .env.audio -- eddy audio-proof ")
+    assert any(
+        action["onepassword_then_run"].startswith("op run --env-file .env.audio -- eddy audio-proof ")
+        for action in persisted_report["unblock_actions"]
+        if action["action"] == "configure_one_audio_provider"
+    )
+    bakeoff_md = (result.run_dir / "bakeoff.md").read_text(encoding="utf-8")
+    assert "- remaining_blockers: " in bakeoff_md
+    assert "- onepassword_audio_retry_command: op run --env-file .env.audio -- eddy audio-proof " in bakeoff_md
     assert set(ranking["remaining_blockers"]) == {
         "cloud_audio_credentials_missing_or_failed",
         "pending_lennox_8_of_10_review",
